@@ -226,22 +226,24 @@ public:
         ss = std::make_shared<og::SimpleSetup>(csi);
     }
 
+    /* . The distance between each point in the discrete geodesic is tuned by the "delta" parameter
+         Valid step size for manifold traversal with delta*/
     void setConstrainedOptions()
     {
-        // c_opt.delta =  0.5;
-        // c_opt.lambda = 3.5;
-        // c_opt.tolerance = 1.0; //1.5
+        c_opt.delta =  0.5; //0.18
+        c_opt.lambda = 3.0;
+        c_opt.tolerance = 0.01; // 0.05
+        c_opt.time = 600.;
+        c_opt.tries = 600;
+        c_opt.range = 0;
+        
+        /* POSE CONSTRAINT PARAMETER */
+        // c_opt.delta =  0.1;
+        // c_opt.lambda = 3;
+        // c_opt.tolerance = 1e-3; //1.5
         // c_opt.time = 600.;
         // c_opt.tries = 600;
         // c_opt.range = 0;
-        
-        /* POSE CONSTRAINT PARAMETER */
-        c_opt.delta =  0.5;
-        c_opt.lambda = 3;
-        c_opt.tolerance = 1e-3; //1.5
-        c_opt.time = 500.;
-        c_opt.tries = 500;
-        c_opt.range = 0;
 
         /* ORIENTATION CONSTRAINT PARAMETER */
         // c_opt.delta =  0.5;
@@ -250,6 +252,7 @@ public:
         // c_opt.time = 1000.;
         // c_opt.tries = 500;
         // c_opt.range = 0;
+
         constraint->setTolerance(c_opt.tolerance);
         constraint->setMaxIterations(c_opt.tries);
 
@@ -259,12 +262,22 @@ public:
 
     void setAtlasOptions()
     {
-        a_opt.epsilon = om::ATLAS_STATE_SPACE_EPSILON;
-        a_opt.rho = om::CONSTRAINED_STATE_SPACE_DELTA * om::ATLAS_STATE_SPACE_RHO_MULTIPLIER;
-        a_opt.exploration = om::ATLAS_STATE_SPACE_EXPLORATION;
+        /* 
+        static const unsigned int ATLAS_STATE_SPACE_SAMPLES = 50;
+        static const double ATLAS_STATE_SPACE_EPSILON = 0.05;
+        static const double ATLAS_STATE_SPACE_RHO_MULTIPLIER = 5;
+        static const double ATLAS_STATE_SPACE_ALPHA = boost::math::constants::pi<double>() / 8.0;
+        static const double ATLAS_STATE_SPACE_EXPLORATION = 0.75;
+        static const unsigned int ATLAS_STATE_SPACE_MAX_CHARTS_PER_EXTENSION = 200;
+        static const double ATLAS_STATE_SPACE_BACKOFF = 0.75;
+        */
+
+        a_opt.epsilon = 1.0;
+        a_opt.rho = 0.03; //::CONSTRAINED_STATE_SPACE_DELTA * om::ATLAS_STATE_SPACE_RHO_MULTIPLIER;
+        a_opt.exploration = 0.20; // om::ATLAS_STATE_SPACE_EXPLORATION;
         a_opt.alpha = om::ATLAS_STATE_SPACE_ALPHA;
         a_opt.bias = false;
-        a_opt.separate = false;
+        a_opt.separate = true; //default : false
         a_opt.charts = om::ATLAS_STATE_SPACE_MAX_CHARTS_PER_EXTENSION;
 
         if (!(type == AT || type == TB))
@@ -425,7 +438,7 @@ public:
         ss->setPlanner(pp);
     }
 
-    ob::PlannerStatus solveOnce(bool output = false, const std::string &name = "ompl")
+    ob::PlannerStatus solveOnce(bool output = false, const std::string &name="projection")
     {
         ss->setup();
         ob::PlannerStatus stat = ss->solve(c_opt.time); 
@@ -434,7 +447,8 @@ public:
         if (stat)
         {
             // Get solution and validate
-            auto path = ss->getSolutionPath();
+            // auto path = ss->getSolutionPath();
+            ompl::geometric::PathGeometric path = ss->getSolutionPath();
             if (!path.check())
                 OMPL_WARN("Path fails check!");
 
@@ -451,15 +465,41 @@ public:
             if (!simplePath.check())
                 OMPL_WARN("Simplified path fails check!");
 
-            // Interpolate and validate interpolated solution path.
-            OMPL_INFORM("Interpolating path...");
+            /* Interpolate and validate interpolated solution path.
+            Insert a number of states in a path so that the
+                path is made up of exactly \e count states. States are
+                inserted uniformly (more states on longer
+                segments). Changes are performed only if a path has
+                less than \e count states.
+
+             void ompl::geometric::PathGeometric::interpolate()
+            {
+                std::vector<base::State *> newStates;
+                const int segments = states_.size() - 1;
+            
+                for (int i = 0; i < segments; ++i)
+                {
+                    base::State *s1 = states_[i];
+                    base::State *s2 = states_[i + 1];
+            
+                    newStates.push_back(s1);
+                    unsigned int n = si_->getStateSpace()->validSegmentCount(s1, s2);
+            
+                    std::vector<base::State *> block;
+                    si_->getMotionStates(s1, s2, block, n - 1, false, true);
+                    newStates.insert(newStates.end(), block.begin(), block.end());
+                }
+                newStates.push_back(states_[segments]);
+                states_.swap(newStates);
+            }
+            */
             path.interpolate();
 
-            if (!path.check())
-                OMPL_WARN("Interpolated simplified path fails check!");
+            // if (!path.check())
+            //     OMPL_WARN("Interpolated simplified path fails check!");
 
-            OMPL_INFORM("Interpolating simplified path...");
-            simplePath.interpolate();
+            // OMPL_INFORM("Interpolating simplified path...");
+            // simplePath.interpolate();
 
             if (!simplePath.check())
                 OMPL_WARN("Interpolated simplified path fails check!");

@@ -58,8 +58,14 @@
 #include <trajectory_msgs/JointTrajectoryPoint.h>
 
 #include <boost/algorithm/string.hpp>
+#include <unsupported/Eigen/MatrixFunctions>
+
 using namespace std;
 unsigned int links = 14;
+Eigen::Affine3d left_base = Eigen::Affine3d::Identity();
+Eigen::Affine3d right_base = Eigen::Affine3d::Identity();
+
+
 class ConstrainedKinematicChainValidityChecker : public KinematicChainValidityChecker
 {
 public:
@@ -202,7 +208,7 @@ public:
             Eigen::Affine3d rt_2 = right_arm->getTransform(q_temp.segment(7, 7));
             Eigen::Affine3d result_2 = lt_2.inverse() * rt_2;
             double g2 = (result_2.linear().transpose() * init.linear() - Eigen::Matrix3d::Identity()).norm();
-            out(1, i) = (g1 - g2) / (2 * h);
+            out(0, i) = (g1 - g2) / (2 * h);
         }
     }
 
@@ -227,14 +233,16 @@ public:
             left_qinit[i] = start[i];
             right_qinit[i] = start[i + 7];
         }
+        left_base.translation() = Eigen::Vector3d(0.0, 0.2, 0.0);
+        right_base.translation() = Eigen::Vector3d(0.0, -0.2, 0.0);
 
         left_arm = std::make_shared<FrankaModelUpdater>(left_q);
         right_arm = std::make_shared<FrankaModelUpdater>(right_q);
-        rot_jaco_ = std::make_shared<rot_jaco>();
 
-        left_init = left_arm->getTransform(left_qinit);
-        right_init = right_arm->getTransform(right_qinit);
+        left_init = left_base * left_arm->getTransform(left_qinit);
+        right_init = right_base * right_arm->getTransform(right_qinit);
         init = left_init.inverse() * right_init;
+        init_tr = init.linear().transpose();
     }
 
     /*actual constraint function, state "x" from the ambient space */
@@ -244,57 +252,64 @@ public:
         Eigen::VectorXd &&temp = x.segment(0, 7);
         Eigen::VectorXd &&temp2 = x.segment(7, 7);
 
-        Eigen::Affine3d lt = left_arm->getTransform(temp);
-        Eigen::Affine3d rt = right_arm->getTransform(temp2);
+        Eigen::Affine3d lt = left_base * left_arm->getTransform(temp);
+        Eigen::Affine3d rt = right_base * right_arm->getTransform(temp2);
 
         Eigen::Affine3d result = lt.inverse() * rt;
-
+        
+        double r, d;
         Eigen::Quaterniond cur_q(result.linear());
         Eigen::Quaterniond ori_q(init.linear());
-
-        double r, d;
         r = cur_q.angularDistance(ori_q);
-        // d =  (result.translation() - init.translation()).norm();
-
+        d = (result.translation() - init.translation()).norm();
+        
+        // double d_rot;
+        // d_rot = (  init_tr * result.linear() ).log().norm();
+        
         // r = cur_q.dot(ori_q);
-        d =  (result.translation() - init.translation()).squaredNorm();
+        // d =  (result.translation() - init.translation()).squaredNorm();
 
-        out[0] = d ;
-        cout << temp.transpose() << ' ' << temp2.transpose() << endl;
-        std::cout <<" translation : " << d << std::endl;
-        cout << "rotation : " << r << endl;
-        cout << "trans origin : " << init.translation().transpose() << endl <<
-        "trans current: " << result.translation().transpose() << endl;
+        out[0] = d + r;
+        // cout << temp.transpose() << ' ' << temp2.transpose() << endl;
+        // std::cout << " translation : " << d << std::endl;
+        // cout << "rotation : " << r << endl;
+        // cout << "rotation : " << d_rot << endl;
+        // cout << "trans origin : " << init.translation().transpose() << endl
+            //  << "trans current: " << result.translation().transpose() << endl;
     }
 
+    /* his is very computationally intensive, and providing an analytic derivative is preferred. We provide a simple scrip */
     void jacobian(const Eigen::Ref<const Eigen::VectorXd> &x, Eigen::Ref<Eigen::MatrixXd> out) const override
     {
         double h = 1e-3;
-        double r, d;
+        double r, d, d_rot;
         Eigen::Quaterniond ori_q(init.linear());
         for (int i = 0; i < 14; i++)
         {
             Eigen::VectorXd &&q_temp = x;
             q_temp(i) = x(i) + h;
-            Eigen::Affine3d lt_1 = left_arm->getTransform(q_temp.segment(0, 7));
-            Eigen::Affine3d rt_1 = right_arm->getTransform(q_temp.segment(7, 7));
+            Eigen::Affine3d lt_1 = left_base * left_arm->getTransform(q_temp.segment(0, 7));
+            Eigen::Affine3d rt_1 = right_base * right_arm->getTransform(q_temp.segment(7, 7));
             Eigen::Affine3d result_1 = lt_1.inverse() * rt_1;
             Eigen::Quaterniond cur1_q(result_1.linear());
 
+            // d_rot = ( init_tr * result_1.linear() ).log().norm();
             r = cur1_q.angularDistance(ori_q);
-            // d = (result_1.translation() - init.translation()).norm();
-            d =  (result_1.translation() - init.translation()).squaredNorm();
-            double g1 = d;
+            d = (result_1.translation() - init.translation()).norm();
+            // d =  (result_1.translation() - init.translation()).squaredNorm();
+            double g1 = d + r;
 
             q_temp(i) = x(i) - h;
-            Eigen::Affine3d lt_2 = left_arm->getTransform(q_temp.segment(0, 7));
-            Eigen::Affine3d rt_2 = right_arm->getTransform(q_temp.segment(7, 7));
+            Eigen::Affine3d lt_2 = left_base * left_arm->getTransform(q_temp.segment(0, 7));
+            Eigen::Affine3d rt_2 = right_base * right_arm->getTransform(q_temp.segment(7, 7));
             Eigen::Affine3d result_2 = lt_2.inverse() * rt_2;
             Eigen::Quaterniond cur2_q(result_2.linear());
             r = cur2_q.angularDistance(ori_q);
-            // d =  (result_2.translation() - init.translation()).norm();
-            d =  (result_2.translation() - init.translation()).squaredNorm();
-            double g2 = d;
+            d = (result_2.translation() - init.translation()).norm();
+            // d_rot = ( init_tr * result_2.linear() ).log().norm();
+            
+            // d =  (result_2.translation() - init.translation()).squaredNorm();
+            double g2 = d + r;
             out(0, i) = (g1 - g2) / (2 * h);
         }
     }
@@ -302,7 +317,7 @@ public:
 private:
     Eigen::Matrix<double, 7, 1> left_q, right_q;
     Eigen::Matrix<double, 7, 1> left_qinit, right_qinit;
-    Eigen::Affine3d left_init, right_init, init;
+    Eigen::Affine3d left_init, right_init, init, init_tr;
 
     std::shared_ptr<FrankaModelUpdater> init_left_arm, left_arm;
     std::shared_ptr<FrankaModelUpdater> right_arm, init_right_arm;
@@ -310,24 +325,18 @@ private:
     Eigen::Matrix<double, 4, 4> init_;
 };
 
-
 bool planning(ConstrainedProblem &cp, ompl::geometric::PathGeometric &path)
 {
     clock_t start_time = clock();
     ob::PlannerStatus stat = cp.solveOnce(true);
     clock_t end_time = clock();
 
-    if (stat)
-    {
-        auto filename = boost::str(boost::format("kinematic_path_%i.dat") % cp.constraint->getAmbientDimension());
-        OMPL_INFORM("Dumping problem information to `%s`.", filename.c_str());
-        path = cp.ss->getSolutionPath();
-        path.interpolate();
-        std::ofstream pathfile(filename);
-        path.printAsMatrix(pathfile);
-        pathfile.close();
-    }
-    OMPL_INFORM("PLANNING TIME : %d s", (end_time - start_time)/CLOCKS_PER_SEC );
+    // if (stat)
+    // {
+    //     path = cp.ss->getSolutionPath();
+    //     path.interpolate();
+    // }
+    OMPL_INFORM("PLANNING TIME : %d s", (end_time - start_time) / CLOCKS_PER_SEC);
     return stat;
 }
 
@@ -341,32 +350,23 @@ ompl::geometric::PathGeometric plannedPath()
     Eigen::VectorXd start(links), goal(links);
     start.setZero();
     goal.setZero();
-
-    // start << -0.8341104291882545, 1.2348735641071011, 1.00537157614749, -1.5289294407228247, -1.1881258342823753, 2.0753347982508044, 2.8207232078189586, 0.23372551002806874, 0.7142164410055684, 0.2943199726958308, -0.9409683977537915, -0.02818681091432607, 1.7094465432762362, 2.773245418577058;
-    // goal << 2.4443141664406918, -0.7673093281937359, -2.379190146240761, -1.6439317270097529, -0.6482301722330581, 2.153191655830718, 2.614877323088198, 0.24477327245525315, 0.6224009518447352, 0.31530620113160374, -0.8941445687627276, -0.022117751989636114, 1.5761200141723637, 2.814443901055794;
-   
-    /* 물체 위로 5cm 들어올리기 */
-    // start << -0.2039824467099883, 0.8568271883119626, 0.15046922862278453, -1.6059929079303625, -0.22539502881358264, 2.45265689629173, 2.38696627265447, 0.14880794584377596, 0.5493389741288717, 0.1728073603783121, -1.234449106233624, 0.08602683642364185, 1.823904246916223, 2.592454017382943;
-    // goal << -0.1511489060513658, 0.7532571983041805, 0.09234352812635636, -1.6395574290511066, -0.13617879965165014, 2.3932660617279002, 2.3341114295753145, 0.8810467773045515, 0.858100466722242, -1.204158944056235, -1.0263559923072698, 0.9693709913828003, 1.4521482035526039, 2.286352131489894;
     
-    // 1.1, -0.10 , 0.65 quaternion_from_euler(radians(10), radians(3), 0)
-    // start <<2.161974362615302, -1.6211196400330166, -1.7370390401453095, -1.5145536456387945, -1.639059571337155, 1.7287910073202897, 2.8647268907512977, -0.34287270702454675, 0.7475154698699429, 0.9675946552366127, -1.2194944171770716, -0.44037976125558553, 1.7682065389509205, 2.8417982281458145;
-    // goal <<2.4752881033585994, -0.852844128195467, -2.3460912587601706, -1.5495557841216463, -0.49894268575366557, 2.1031176731095025, 2.5476681567538626, -0.00903865011690246, 0.8356112965243518, 0.527152356760939, -0.5868581487969777, -0.032474656825517534, 1.424038493301814, 2.6704731926736804;
-  
-    // 1.1, -0.10 , 0.65 quaternion_from_euler(radians(20), radians(3), 0)
-    // start <<2.4752881033585994, -0.852844128195467, -2.3460912587601706, -1.5495557841216463, -0.49894268575366557, 2.1031176731095025, 2.5476681567538626, -0.00903865011690246, 0.8356112965243518, 0.527152356760939, -0.5868581487969777, -0.032474656825517534, 1.424038493301814, 2.6704731926736804;
-    // goal << 2.6554383117985405, -0.6816408244851703, -2.665377798656694, -1.5116285946954708, 0.024393693444898175, 2.058478422563071, 2.221224419650049, 0.5311219766699259, 1.1261012449220025, -1.7337105661131391, -0.7747824135537849, 1.9354537077921568, 0.9956705306532477, 2.288920589428489;
-
-    // SEQUENCE 1
-    start <<-0.2898127935814623, 0.871604960258511, 0.24968300596548199, -1.5992729965601837, -0.339007367747758, 2.4331858591580806, 2.4516225060104455, 0.3936058566580344, 0.5503626134904521, -0.1774017991083653, -1.2298923196557998, 0.27534317080631115, 1.8049455015020976, 2.502355869377598;
-    // goal << 0.482352378896337, 0.6900549038955983, 0.4869100442023136, -1.638750492886491, -0.0891037418181836, 2.248044166974658, 2.2830497566297954, 0.22125341084164832, 0.48001989748524093, -0.131519874476992, -1.1682381916584446, 0.5013927287918933, 1.6757236994299995, 2.3779897883090135;
+    // start << 0.43879842840079253, 0.6382337298947351, -0.5754996808185072, -2.2044480704908374, -2.406856818012579, 3.6105131803103907, -2.0596210802552366, 2.2405497196597017, -0.8977498890476259, -1.360060919844714, -1.982898876524701, -0.7227069072897616, 1.7667101769756277, 2.89261940667946;
+    // goal << -1.86502619472071, 0.42220874521268065, 1.6843138982477912, -2.5612303268037295, -0.21903199608536952, 2.2953892726156653, 1.8306450379136778, 2.1151440739365803, -1.0720649459946567, -1.2938631767371478, -1.6965945498750754, -0.5232065110791524, 1.5449860482660118, 2.6382132931217175;
     
-    // SEQUENCE 2
-    // start << 0.482352378896337, 0.6900549038955983, 0.4869100442023136, -1.638750492886491, -0.0891037418181836, 2.248044166974658, 2.2830497566297954, 0.22125341084164832, 0.48001989748524093, -0.131519874476992, -1.1682381916584446, 0.5013927287918933, 1.6757236994299995, 2.3779897883090135;
-    goal << -0.6864821861463876, 0.6275805016749498, 0.6350060778824758, -1.493347242007332, 0.14565167466175735, 1.9504166454346545, 2.123856677338268, -0.025493962777267544, 0.4974417218157958, -0.11566585378996927, -1.0538657580430102, 0.7555793957606083, 1.4690750295785182, 2.2367731874563015;
+    // start << -1.731687943523212, 1.6596897792834329, 1.6755381678608345, -2.448617084593089, -1.2336515104478012, 1.5062962092174126, 2.5407480396093587, 0.42023360149356837, 0.07578672395956589, -0.2801165758285413, -1.6979509960234709, 0.5055300131612396, 1.5519386111121753, 1.885272932257551;
+    start << -1.86502619472071, 0.42220874521268065, 1.6843138982477912, -2.5612303268037295, -0.21903199608536952, 2.2953892726156653, 1.8306450379136778, 2.1151440739365803, -1.0720649459946567, -1.2938631767371478, -1.6965945498750754, -0.5232065110791524, 1.5449860482660118, 2.6382132931217175;
+    goal << -1.1883966192292919, 0.47654684635278594, 1.188900403834024, -2.043110376072939, 0.22786012603711361, 2.0359730912954896, 1.9358084609099853, 2.2170307858961844, -1.2280571039695196, -1.4167808509505564, -1.4485510862730249, -0.41639268409727337, 1.6864723603999285, 2.66725585105675;
 
-    // start << -0.6864821861463876, 0.6275805016749498, 0.6350060778824758, -1.493347242007332, 0.14565167466175735, 1.9504166454346545, 2.123856677338268, -0.025493962777267544, 0.4974417218157958, -0.11566585378996927, -1.0538657580430102, 0.7555793957606083, 1.4690750295785182, 2.2367731874563015;
-    // goal << -0.8207871103501763, 0.7882167189851564, 0.6964016612131573, -1.1537469259134738, 0.344119178725943, 1.5870514099177153, 2.04163875371791, -0.3250191787143147, 0.6654150212893929, -0.08055724917378417, -0.9727408818425071, 1.04822819984304, 1.2646961949388844, 2.0584532029228324;
+    // start << -1.1883966192292919, 0.47654684635278594, 1.188900403834024, -2.043110376072939, 0.22786012603711361, 2.0359730912954896, 1.9358084609099853, 2.2170307858961844, -1.2280571039695196, -1.4167808509505564, -1.4485510862730249, -0.41639268409727337, 1.6864723603999285, 2.66725585105675;
+    // goal << -1.1839009766884918, 0.5989827756945714, 1.2419279406857917, -1.8941837370096823, 0.5124819117075965, 2.0246317808603576, 2.104747264710482, 1.9311295581266086, -1.461368971663593, -1.4059743203337784, -1.8847327577656103, -0.3470843084329271, 2.14022655344604, 2.76799537584971;
+
+    // start<< -1.1839009766884918, 0.5989827756945714, 1.2419279406857917, -1.8941837370096823, 0.5124819117075965, 2.0246317808603576, 2.104747264710482, 1.9311295581266086, -1.461368971663593, -1.4059743203337784, -1.8847327577656103, -0.3470843084329271, 2.14022655344604, 2.76799537584971;
+    // goal << -1.283366045643523, 0.7765156182977472, 1.2207072053353922, -1.8138368218093084, 0.5720248354896629, 1.864962889712384, 2.013001741822463, 1.7869467393780099, -1.7461996310469938, -1.5103788661534288, -1.9024155978863702, -0.306624896948462, 2.0792647705952243, 2.5495489263789413;
+
+    // start << -1.283366045643523, 0.7765156182977472, 1.2207072053353922, -1.8138368218093084, 0.5720248354896629, 1.864962889712384, 2.013001741822463, 1.7869467393780099, -1.7461996310469938, -1.5103788661534288, -1.9024155978863702, -0.306624896948462, 2.0792647705952243, 2.5495489263789413;
+    // goal << -1.3221287249665774, 0.9009694143728474, 1.1966835297856593, -1.7257454180007339, 0.6045753542044264, 1.740045581988698, 1.9942301147497448,  1.7329642169027442, -1.7597508080616242, -1.6463380442829965, -1.8396026654012847, -0.09169653782940333, 2.0070409700798195, 2.304969253475799;
+
     std::cout << "init state   : " << start.transpose() << std::endl;
     std::cout << "target state : " << goal.transpose() << std::endl;
 
@@ -377,6 +377,9 @@ ompl::geometric::PathGeometric plannedPath()
     cp.setAtlasOptions();
     cp.setStartAndGoalStates(start, goal);
     cp.setPlanner(planners[0]);
+    
+    // Get the maximum value a call to distance() can return (or an upper bound). For unbounded state spaces, this function can return infinity. More
+    cout << cp.css->getMaximumExtent() << endl; // 18.4372
     // cp.ss->setStateValidityChecker(std::make_shared<ConstrainedKinematicChainValidityChecker>(cp.csi));
     ompl::geometric::PathGeometric path(cp.csi);
     if (planning(cp, path))
@@ -392,84 +395,75 @@ int main(int argc, char **argv)
     ros::AsyncSpinner spinner(1);
     spinner.start();
     ros::NodeHandle node_handle("~");
-    
+
+    /* PLANNING AND RETURN PLANNED PATH */
+    ompl::geometric::PathGeometric path_(plannedPath());
+    ifstream path_file("/home/jiyeong/catkin_ws/projection_path.txt");
+
+
     ros::WallDuration(1.0).sleep();
     const std::string PLANNING_GROUP = "panda_arms";
     moveit::planning_interface::MoveGroupInterface move_group(PLANNING_GROUP);
-        
+
     robot_state::RobotStatePtr robot_state = move_group.getCurrentState(); // plan_manager->robot_state_;
     robot_model::RobotModelConstPtr robot_model = move_group.getRobotModel();
-  
+
     ros::Publisher display_publisher = node_handle.advertise<moveit_msgs::DisplayTrajectory>("/move_group/display_planned_path", 5, true);
-    while (display_publisher.getNumSubscribers() == 0 && ros::ok())    {ros::spinOnce();}
+    while (display_publisher.getNumSubscribers() == 0 && ros::ok())
+    {
+        ros::spinOnce();
+    }
     moveit_msgs::DisplayTrajectory display_trajectory;
     robot_state::robotStateToRobotStateMsg(*robot_state, display_trajectory.trajectory_start);
     display_trajectory.model_id = "panda";
-    
+
     robot_trajectory::RobotTrajectory trajectory_(robot_state->getRobotModel(), "panda_arms");
     trajectory_.clear();
     moveit_msgs::RobotTrajectory robot_trajectory;
-    
-    /* PLANNING AND RETURN PLANNED PATH */
-    ompl::geometric::PathGeometric path_(plannedPath());
-    
     trajectory_msgs::JointTrajectory joint_trajectory;
     joint_trajectory.joint_names = move_group.getJointNames();
-
-    ifstream path_file("/home/jiyeong/catkin_ws/ompl_path.txt");
-    char inputString[1000];
-    int index = 0;
-
-    while (path_file){
+    
+    while (path_file)
+    {
         trajectory_msgs::JointTrajectoryPoint traj_point;
-        // path_file.getline(inputString, 1000);
-		// char* tok1 = strtok(inputString," ");
         bool eof = false;
-        for (int j = 0 ; j <14 ; j++){
+        for (int j = 0; j < 14; j++)
+        {
             double data;
-            if( ! (path_file >> data) ){ cout << "wrong file: " << j << endl; eof=true; break; }
+            if (!(path_file >> data))
+            {
+                cout << "wrong file: " << j << endl;
+                eof = true;
+                break;
+            }
             traj_point.positions.push_back(data);
         }
-        if(eof) break;
+        if (eof)
+            break;
         // traj_point.time_from_start = ros::Duration();
         joint_trajectory.points.push_back(traj_point);
-        index ++;
     }
-    
+
     double total_time = 10.0;
     int n_traj = joint_trajectory.points.size();
-    for(int i=0; i<n_traj; i++)
+    for (int i = 0; i < n_traj; i++)
     {
         joint_trajectory.points[i].time_from_start = ros::Duration(total_time / n_traj * i);
     }
-    // while (index < 22){
-    //     trajectory_msgs::JointTrajectoryPoint traj_point;
-    //     path_file.getline(inputString, 1000);
-        
-	// 	char* tok1 = strtok(inputString," ");
-    //     for (int j = 0 ; j <14 ; j++){
-    //         traj_point.positions.push_back(atof(tok1));
-    //         tok1 = strtok(NULL, " ");
-    //     }
-    //     traj_point.time_from_start = ros::Duration();
-    //     joint_trajectory.points.push_back(traj_point);
-    //     index ++;
-    // }
+
     robot_trajectory.joint_trajectory = joint_trajectory;
-    trajectory_.setRobotTrajectoryMsg(*robot_state, joint_trajectory);
-   
-    trajectory_.getRobotTrajectoryMsg(robot_trajectory);
+    // trajectory_.setRobotTrajectoryMsg(*robot_state, joint_trajectory);
+    // trajectory_.getRobotTrajectoryMsg(robot_trajectory);
     display_trajectory.trajectory.push_back(robot_trajectory);
-    display_publisher.publish(display_trajectory);
+    // display_publisher.publish(display_trajectory);
     cout << "PUBLISHED" << endl;
-    
+
     moveit::planning_interface::MoveGroupInterface::Plan plan;
     plan.trajectory_ = robot_trajectory;
     plan.planning_time_ = total_time;
     move_group.execute(plan);
-    // move_group.move();
-    
+  
     cout << "EXECUTE" << endl;
 
-return 0;
+    return 0;
 }
