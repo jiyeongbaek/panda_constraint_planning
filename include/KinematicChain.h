@@ -204,7 +204,7 @@ public:
         for (unsigned int i = 0; i < dimension_; ++i)
         {
             double diff = (*s1++) - (*s2++);
-            if (fabs(diff) > 1e-20)
+            if (fabs(diff) > 1e-10)
                 return false;
         }
         return true;

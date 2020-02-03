@@ -230,11 +230,11 @@ public:
          Valid step size for manifold traversal with delta*/
     void setConstrainedOptions()
     {
-        c_opt.delta =  0.5; //0.18
+        c_opt.delta =  0.8; //0.18
         c_opt.lambda = 3.0;
-        c_opt.tolerance = 0.01; // 0.05
+        c_opt.tolerance = 0.02; // 0.05
         c_opt.time = 600.;
-        c_opt.tries = 600;
+        c_opt.tries = 100;
         c_opt.range = 0;
         
         /* POSE CONSTRAINT PARAMETER */
@@ -455,16 +455,6 @@ public:
             if (stat == ob::PlannerStatus::APPROXIMATE_SOLUTION)
                 OMPL_WARN("Solution is approximate.");
 
-            // Simplify solution and validate simplified solution path.
-            OMPL_INFORM("Simplifying solution...");
-            ss->simplifySolution(5.);
-
-            auto simplePath = ss->getSolutionPath();
-            OMPL_INFORM("Simplified Path Length: %.3f -> %.3f", path.length(), simplePath.length());
-
-            if (!simplePath.check())
-                OMPL_WARN("Simplified path fails check!");
-
             /* Interpolate and validate interpolated solution path.
             Insert a number of states in a path so that the
                 path is made up of exactly \e count states. States are
@@ -495,26 +485,12 @@ public:
             */
             path.interpolate();
 
-            // if (!path.check())
-            //     OMPL_WARN("Interpolated simplified path fails check!");
-
-            // OMPL_INFORM("Interpolating simplified path...");
-            // simplePath.interpolate();
-
-            if (!simplePath.check())
-                OMPL_WARN("Interpolated simplified path fails check!");
-
             if (output)
             {
                 OMPL_INFORM("Dumping path to `%s_path.txt`.", name.c_str());
                 std::ofstream pathfile((boost::format("%1%_path.txt") % name).str());
                 path.printAsMatrix(pathfile);
                 pathfile.close();
-
-                OMPL_INFORM("Dumping simplified path to `%s_simplepath.txt`.", name.c_str());
-                std::ofstream simplepathfile((boost::format("%1%_simplepath.txt") % name).str());
-                simplePath.printAsMatrix(simplepathfile);
-                simplepathfile.close();
             }
         }
         else

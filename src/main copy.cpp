@@ -204,9 +204,14 @@ public:
         // d_rot = (  init_tr * result.linear() ).log().norm();
         
         out[0] = d + r;
+        // cout << temp.transpose() << ' ' << temp2.transpose() << endl;
+        std::cout << " translation : " << d << std::endl;
+        // cout << "rotation : " << r << endl;
+        // cout << "rotation : " << d_rot << endl;
+        cout << out << endl;
     }
 
-    /* this is very computationally intensive, and providing an analytic derivative is preferred. We provide a simple scrip */
+    /* his is very computationally intensive, and providing an analytic derivative is preferred. We provide a simple scrip */
     void jacobian(const Eigen::Ref<const Eigen::VectorXd> &x, Eigen::Ref<Eigen::MatrixXd> out) const override
     {
         double h = 1e-3;
@@ -253,10 +258,10 @@ private:
     Eigen::Matrix<double, 4, 4> init_;
 };
 
-bool planning(ConstrainedProblem &cp, ompl::geometric::PathGeometric &path, std::string file_name)
+bool planning(ConstrainedProblem &cp, ompl::geometric::PathGeometric &path)
 {
     clock_t start_time = clock();
-    ob::PlannerStatus stat = cp.solveOnce(true, file_name);
+    ob::PlannerStatus stat = cp.solveOnce(true);
     clock_t end_time = clock();
 
     // if (stat)
@@ -268,7 +273,7 @@ bool planning(ConstrainedProblem &cp, ompl::geometric::PathGeometric &path, std:
     return stat;
 }
 
-ompl::geometric::PathGeometric plannedPath(Eigen::VectorXd start, Eigen::VectorXd goal, std::string file_name)
+ompl::geometric::PathGeometric plannedPath(Eigen::VectorXd start, Eigen::VectorXd goal)
 {
     auto ss = std::make_shared<KinematicChainSpace>(links);
     enum SPACE_TYPE space = PJ; //"PJ", "AT", "TB"
@@ -290,18 +295,18 @@ ompl::geometric::PathGeometric plannedPath(Eigen::VectorXd start, Eigen::VectorX
     cout << cp.css->getMaximumExtent() << endl; // 18.4372
     // cp.ss->setStateValidityChecker(std::make_shared<ConstrainedKinematicChainValidityChecker>(cp.csi));
     ompl::geometric::PathGeometric path(cp.csi);
-    if (planning(cp, path, file_name))
+    if (planning(cp, path))
         return path;
     else
         OMPL_ERROR("PLANNING FAILED");
 }
 
-void execute_path(std::string path_name, moveit::planning_interface::MoveGroupInterface& move_group, double total_time = 7)
+void execute_path(std::string path_name, moveit::planning_interface::MoveGroupInterface& move_group)
 {
     moveit_msgs::RobotTrajectory robot_trajectory;
     trajectory_msgs::JointTrajectory joint_trajectory;
     joint_trajectory.joint_names = move_group.getJointNames();
-    cout << "file name : " << path_name << endl;
+
     ifstream path_file(path_name);
     while (path_file)
     {
@@ -324,6 +329,7 @@ void execute_path(std::string path_name, moveit::planning_interface::MoveGroupIn
         joint_trajectory.points.push_back(traj_point);
     }
 
+    double total_time = 10.0;
     int n_traj = joint_trajectory.points.size();
     for (int i = 0; i < n_traj; i++)
     {
@@ -333,12 +339,11 @@ void execute_path(std::string path_name, moveit::planning_interface::MoveGroupIn
     robot_trajectory.joint_trajectory = joint_trajectory;
     cout << "PUBLISHED" << endl;
 
-
     moveit::planning_interface::MoveGroupInterface::Plan plan;
     plan.trajectory_ = robot_trajectory;
     plan.planning_time_ = total_time;
     move_group.execute(plan);
-    ros::WallDuration(10.0).sleep();
+  
     cout << "EXECUTE" << endl;
 }
 
@@ -349,6 +354,19 @@ int main(int argc, char **argv)
     ros::AsyncSpinner spinner(1);
     spinner.start();
     ros::NodeHandle node_handle("~");
+
+    /* PLANNING AND RETURN PLANNED PATH */
+    // Create a shared pointer to our constraint.
+    Eigen::VectorXd start(links), goal(links);
+    start.setZero();
+    goal.setZero();
+    start <<-1.278022704113855, 0.7599595568823166, 0.8504105865120947, -2.2532133470941753, -1.1298611922879744, 2.521625636015966, 2.2355349196620695,  0.025852137525551332, -0.012156381609418291, 0.28454053715882205, -1.996989239487609, 0.1902084893722976, 1.937095545026834, 2.0326259015811394;
+    goal << 1.8724599095546757, -0.8876780299370965, -1.8366765471836668, -1.9215286517090047, 0.19624468801085224, 2.110239229947917, 2.1865444462085253, 1.9679636352538856, -0.6442305802620372, -1.8145061036978387, -1.8574305808262341, 0.6783518458876869, 2.0151744366993727, 2.113935474954216;
+
+    
+    ompl::geometric::PathGeometric path_(plannedPath(start, goal));
+    
+
     ros::WallDuration(1.0).sleep();
     const std::string PLANNING_GROUP = "panda_arms";
     moveit::planning_interface::MoveGroupInterface move_group(PLANNING_GROUP);
@@ -361,34 +379,107 @@ int main(int argc, char **argv)
     {
         ros::spinOnce();
     }
-    // moveit_msgs::DisplayTrajectory display_trajectory;
-    // robot_state::robotStateToRobotStateMsg(*robot_state, display_trajectory.trajectory_start);
-    // display_trajectory.model_id = "panda";
 
-    /* PLANNING AND RETURN PLANNED PATH */
-    Eigen::VectorXd start(links), goal(links);
+    moveit_msgs::DisplayTrajectory display_trajectory;
+    robot_state::robotStateToRobotStateMsg(*robot_state, display_trajectory.trajectory_start);
+    display_trajectory.model_id = "panda";
+
+    robot_trajectory::RobotTrajectory trajectory_(robot_state->getRobotModel(), "panda_arms");
+    trajectory_.clear();
+    moveit_msgs::RobotTrajectory robot_trajectory;
+    trajectory_msgs::JointTrajectory joint_trajectory;
+    joint_trajectory.joint_names = move_group.getJointNames();
+    
+    ifstream path_file("/home/jiyeong/catkin_ws/projection_path.txt");
+    while (path_file)
+    {
+        trajectory_msgs::JointTrajectoryPoint traj_point;
+        bool eof = false;
+        for (int j = 0; j < 14; j++)
+        {
+            double data;
+            if (!(path_file >> data))
+            {
+                cout << "wrong file: " << j << endl;
+                eof = true;
+                break;
+            }
+            traj_point.positions.push_back(data);
+        }
+        if (eof)
+            break;
+        // traj_point.time_from_start = ros::Duration();
+        joint_trajectory.points.push_back(traj_point);
+    }
+
+    double total_time = 10.0;
+    int n_traj = joint_trajectory.points.size();
+    for (int i = 0; i < n_traj; i++)
+    {
+        joint_trajectory.points[i].time_from_start = ros::Duration(total_time / n_traj * i);
+    }
+
+    robot_trajectory.joint_trajectory = joint_trajectory;
+    // trajectory_.setRobotTrajectoryMsg(*robot_state, joint_trajectory);
+    // trajectory_.getRobotTrajectoryMsg(robot_trajectory);
+    display_trajectory.trajectory.push_back(robot_trajectory);
+    // display_publisher.publish(display_trajectory);
+    cout << "PUBLISHED" << endl;
+
+    moveit::planning_interface::MoveGroupInterface::Plan plan;
+    plan.trajectory_ = robot_trajectory;
+    plan.planning_time_ = total_time;
+    move_group.execute(plan);
+  
+    cout << "EXECUTE" << endl;
+/* ==============================================================================*/
+
     start.setZero();
     goal.setZero();
-    start << -1.278022704113855, 0.7599595568823166, 0.8504105865120947, -2.2532133470941753, -1.1298611922879744, 2.521625636015966, 2.2355349196620695,  0.025852137525551332, -0.012156381609418291, 0.28454053715882205, -1.996989239487609, 0.1902084893722976, 1.937095545026834, 2.0326259015811394;
-    goal << 1.7774068066631177, -1.6071385556188158, -1.4847508757964791, -1.889774699489722, -0.9339935055363789, 1.6617390338964741, 2.582642192418717,  0.8231283220077812, 0.7854915462891668, -1.3605836081236864, -1.3645664916893638, 1.4984756557502872, 1.03801815440285, 1.8101569484820168;
-    ompl::geometric::PathGeometric path_(plannedPath(start, goal, "1"));
-    execute_path("/home/jiyeong/catkin_ws/1_path.txt", move_group);
+    start << 1.8724599095546757, -0.8876780299370965, -1.8366765471836668, -1.9215286517090047, 0.19624468801085224, 2.110239229947917, 2.1865444462085253, 1.9679636352538856, -0.6442305802620372, -1.8145061036978387, -1.8574305808262341, 0.6783518458876869, 2.0151744366993727, 2.113935474954216;
+    goal<< -2.6507471333602557, -1.589255627751553, 1.5684394981602237, -1.7392113847304413, 2.8184155924430048, 0.3381303947470854, 2.049881477237161,  0.2195216325634586, 0.825405588554725, -0.739912114743606, -1.7326241018909547, 1.729176902034074, 0.8970502468391156, 1.5151332948318228;
+    ompl::geometric::PathGeometric path2_(plannedPath(start, goal));
+    ifstream path2_file("/home/jiyeong/catkin_ws/projection_path.txt");
+
+    trajectory_.clear();
+    while (path2_file)
+    {
+        trajectory_msgs::JointTrajectoryPoint traj_point;
+        bool eof = false;
+        for (int j = 0; j < 14; j++)
+        {
+            double data;
+            if (!(path2_file >> data))
+            {
+                cout << "wrong file: " << j << endl;
+                eof = true;
+                break;
+            }
+            traj_point.positions.push_back(data);
+        }
+        if (eof)
+            break;
+        joint_trajectory.points.push_back(traj_point);
+    }
+
+    double total_time = 10.0;
+    int n_traj = joint_trajectory.points.size();
+    for (int i = 0; i < n_traj; i++)
+    {
+        joint_trajectory.points[i].time_from_start = ros::Duration(total_time / n_traj * i);
+    }
+
+    robot_trajectory.joint_trajectory = joint_trajectory;
+    display_trajectory.trajectory.push_back(robot_trajectory);
+    // display_publisher.publish(display_trajectory);
     
-    // start.setZero();
-    // goal.setZero();
-    // start << 1.7774068066631177, -1.6071385556188158, -1.4847508757964791, -1.889774699489722, -0.9339935055363789, 1.6617390338964741, 2.582642192418717,  0.8231283220077812, 0.7854915462891668, -1.3605836081236864, -1.3645664916893638, 1.4984756557502872, 1.03801815440285, 1.8101569484820168;
-    // goal << 1.7964825792215433, -1.4608329426331506, -1.5601839208321042, -1.9023645158590405, -0.5018620082517232, 2.029607475617737, 2.6516940006355156, 1.9134626801325931, -0.8272316695119547, -1.6818612100242758, -1.8767001731565196, 0.46704141331047666, 2.10534748329074, 2.2395795202166964;
-    // ompl::geometric::PathGeometric path2_(plannedPath(start, goal, "2"));
-    // execute_path("/home/jiyeong/catkin_ws/2.txt", move_group);
-    // ros::WallDuration(10.0).sleep();
-
-    // start.setZero();
-    // goal.setZero();
-    // start << 1.7964825792215433, -1.4608329426331506, -1.5601839208321042, -1.9023645158590405, -0.5018620082517232, 2.029607475617737, 2.6516940006355156, 1.9134626801325931, -0.8272316695119547, -1.6818612100242758, -1.8767001731565196, 0.46704141331047666, 2.10534748329074, 2.2395795202166964;
-    // goal <<  1.699059698012825, -1.7031600686437707, -1.5601096577679954, -1.742651411228564, -0.26001397984819996, 1.859883480955693, 2.4405694939121227, 0.252032751296342, 0.8481168795391635, -0.7850492071727834, -1.7340252218533394, 1.7612539500692608, 0.8689462263242886, 1.5201191679260264;
-    // ompl::geometric::PathGeometric path3_(plannedPath(start, goal, "3"));
-
-    // execute_path("/home/jiyeong/catkin_ws/test.txt", move_group);
+    moveit::planning_interface::MoveGroupInterface::Plan plan;
+    plan.trajectory_ = robot_trajectory;
+    plan.planning_time_ = total_time;
+    move_group.execute(plan);
   
+    cout << "EXECUTE" << endl;
 
+
+    return 0;
 }
