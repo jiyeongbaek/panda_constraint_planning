@@ -190,14 +190,6 @@ public:
     // }
     bool equalStates(const ompl::base::State *state1, const ompl::base::State *state2) const override
     {
-        // bool flag = true;
-        // const auto *cstate1 = state1->as<StateType>();
-        // const auto *cstate2 = state2->as<StateType>();
-
-        // for (unsigned int i = 0; i < dimension_ && flag; ++i)
-        //     flag &= fabs(cstate1->values[i] - cstate2->values[i]) < 1e-4;
-
-        // return flag;
 
         const double *s1 = static_cast<const StateType *>(state1)->values;
         const double *s2 = static_cast<const StateType *>(state2)->values;
@@ -245,19 +237,275 @@ protected:
    
 };
 
+#include <moveit/collision_detection/collision_common.h>
+#include <moveit/robot_model/robot_model.h>
+#include <moveit/robot_state/robot_state.h>
+#include <moveit/utils/robot_model_test_utils.h>
+
+#include <moveit/collision_detection_fcl/collision_common.h>
+#include <moveit/collision_detection_fcl/collision_world_fcl.h>
+#include <moveit/collision_detection_fcl/collision_robot_fcl.h>
+
+#include <urdf_parser/urdf_parser.h>
+#include <geometric_shapes/shape_operations.h>
+
+#include <sstream>
+#include <algorithm>
+#include <ctype.h>
+#include <fstream>
+
+#include <moveit/move_group_interface/move_group_interface.h>
+#include <moveit/planning_scene_interface/planning_scene_interface.h>
+#include <geometric_shapes/shape_operations.h>
+
+typedef collision_detection::CollisionWorldFCL DefaultCWorldType;
+typedef collision_detection::CollisionRobotFCL DefaultCRobotType;
+const std::string panda_joint_names[14] = {"panda_left_joint1", "panda_left_joint2", "panda_left_joint3", "panda_left_joint4", "panda_left_joint5", "panda_left_joint6", "panda_left_joint7",
+                            "panda_right_joint1", "panda_right_joint2", "panda_right_joint3", "panda_right_joint4", "panda_right_joint5", "panda_right_joint6", "panda_right_joint7"};
+/** \brief Brings the panda robot in user defined home position */
+inline void setToHome(robot_state::RobotState& panda_state)
+{
+  panda_state.setToDefaultValues();
+  double joint2 = -0.785;
+  double joint4 = -2.356;
+  double joint6 = 1.571;
+  double joint7 = 0.785;
+  panda_state.setJointPositions("panda_left_joint2", &joint2);
+  panda_state.setJointPositions("panda_right_joint2", &joint2);
+  panda_state.setJointPositions("panda_left_joint4", &joint4);
+  panda_state.setJointPositions("panda_right_joint4", &joint4);
+  panda_state.setJointPositions("panda_left_joint6", &joint6);
+  panda_state.setJointPositions("panda_right_joint6", &joint6);
+  panda_state.setJointPositions("panda_left_joint7", &joint7);
+  panda_state.setJointPositions("panda_right_joint7", &joint7);
+  panda_state.update();
+}
+
+class PandaCollisionCheck
+{
+public:
+  PandaCollisionCheck()
+  {
+    robot_model_ = moveit::core::loadTestingRobotModel("dual_panda");
+    robot_model_ok_ = static_cast<bool>(robot_model_);
+    acm_.reset(new collision_detection::AllowedCollisionMatrix(robot_model_->getLinkModelNames(), false));
+
+    acm_->setEntry("base", "panda_left_link0", true);
+    acm_->setEntry("base", "panda_left_link1", true);
+    acm_->setEntry("base", "panda_left_link2", true);
+    acm_->setEntry("base", "panda_left_link3", true);
+    acm_->setEntry("base", "panda_left_link4", true);
+
+    acm_->setEntry("base", "panda_right_link0", true);
+    acm_->setEntry("base", "panda_right_link1", true);
+    acm_->setEntry("base", "panda_right_link2", true);
+    acm_->setEntry("base", "panda_right_link3", true);
+    acm_->setEntry("base", "panda_right_link4", true);
+
+    acm_->setEntry("panda_left_hand" ,"panda_left_leftfinger" , true);
+    acm_->setEntry("panda_left_hand" ,"panda_left_link3" , true);
+    acm_->setEntry("panda_left_hand" ,"panda_left_link4" , true);
+    acm_->setEntry("panda_left_hand" ,"panda_left_link5" , true);
+    acm_->setEntry("panda_left_hand" ,"panda_left_link6" , true);
+    acm_->setEntry("panda_left_hand" ,"panda_left_link7" , true);
+    acm_->setEntry("panda_left_hand" ,"panda_left_rightfinger" , true);
+    acm_->setEntry("panda_left_hand" ,"panda_right_link0" , true);
+    acm_->setEntry("panda_left_leftfinger" ,"panda_left_link3" , true);
+    acm_->setEntry("panda_left_leftfinger" ,"panda_left_link4" , true);
+    acm_->setEntry("panda_left_leftfinger" ,"panda_left_link6" , true);
+    acm_->setEntry("panda_left_leftfinger" ,"panda_left_link7" , true);
+    acm_->setEntry("panda_left_leftfinger" ,"panda_left_rightfinger" , true);
+    acm_->setEntry("panda_left_leftfinger" ,"panda_right_link0" , true);
+    acm_->setEntry("panda_left_link0" ,"panda_left_link1" , true);
+    acm_->setEntry("panda_left_link0" ,"panda_left_link2" , true);
+    acm_->setEntry("panda_left_link0" ,"panda_left_link3" , true);
+    acm_->setEntry("panda_left_link0" ,"panda_left_link4" , true);
+    acm_->setEntry("panda_left_link0" ,"panda_right_hand" , true);
+    acm_->setEntry("panda_left_link0" ,"panda_right_leftfinger" , true);
+    acm_->setEntry("panda_left_link0" ,"panda_right_link0" , true);
+    acm_->setEntry("panda_left_link0" ,"panda_right_link1" , true);
+    acm_->setEntry("panda_left_link0" ,"panda_right_link2" , true);
+    acm_->setEntry("panda_left_link0" ,"panda_right_link3" , true);
+    acm_->setEntry("panda_left_link0" ,"panda_right_link4" , true);
+    acm_->setEntry("panda_left_link0" ,"panda_right_link5" , true);
+    acm_->setEntry("panda_left_link0" ,"panda_right_link6" , true);
+    acm_->setEntry("panda_left_link0" ,"panda_right_link7" , true);
+    acm_->setEntry("panda_left_link1" ,"panda_left_link2" , true);
+    acm_->setEntry("panda_left_link1" ,"panda_left_link3" , true);
+    acm_->setEntry("panda_left_link1" ,"panda_left_link4" , true);
+    acm_->setEntry("panda_left_link1" ,"panda_right_link0" , true);
+    acm_->setEntry("panda_left_link1" ,"panda_right_link1" , true);
+    acm_->setEntry("panda_left_link1" ,"panda_right_link2" , true);
+    acm_->setEntry("panda_left_link1" ,"panda_right_link3" , true);
+    acm_->setEntry("panda_left_link1" ,"panda_right_link4" , true);
+    acm_->setEntry("panda_left_link1" ,"panda_right_link5" , true);
+    acm_->setEntry("panda_left_link1" ,"panda_right_link6" , true);
+    acm_->setEntry("panda_left_link1" ,"panda_right_link7" , true);
+    acm_->setEntry("panda_left_link2" ,"panda_left_link3" , true);
+    acm_->setEntry("panda_left_link2" ,"panda_left_link4" , true);
+    acm_->setEntry("panda_left_link2" ,"panda_right_link0" , true);
+    acm_->setEntry("panda_left_link2" ,"panda_right_link1" , true);
+    acm_->setEntry("panda_left_link2" ,"panda_right_link2" , true);
+    acm_->setEntry("panda_left_link2" ,"panda_right_link3" , true);
+    acm_->setEntry("panda_left_link2" ,"panda_right_link4" , true);
+    acm_->setEntry("panda_left_link2" ,"panda_right_link5" , true);
+    acm_->setEntry("panda_left_link3" ,"panda_left_link4" , true);
+    acm_->setEntry("panda_left_link3" ,"panda_left_link5" , true);
+    acm_->setEntry("panda_left_link3" ,"panda_left_link6" , true);
+    acm_->setEntry("panda_left_link3" ,"panda_left_link7" , true);
+    acm_->setEntry("panda_left_link3" ,"panda_left_rightfinger" , true);
+    acm_->setEntry("panda_left_link3" ,"panda_right_link0" , true);
+    acm_->setEntry("panda_left_link3" ,"panda_right_link1" , true);
+    acm_->setEntry("panda_left_link3" ,"panda_right_link2" , true);
+    acm_->setEntry("panda_left_link3" ,"panda_right_link3" , true);
+    acm_->setEntry("panda_left_link3" ,"panda_right_link4" , true);
+    acm_->setEntry("panda_left_link4" ,"panda_left_link5" , true);
+    acm_->setEntry("panda_left_link4" ,"panda_left_link6" , true);
+    acm_->setEntry("panda_left_link4" ,"panda_left_link7" , true);
+    acm_->setEntry("panda_left_link4" ,"panda_left_rightfinger" , true);
+    acm_->setEntry("panda_left_link4" ,"panda_right_link0" , true);
+    acm_->setEntry("panda_left_link4" ,"panda_right_link1" , true);
+    acm_->setEntry("panda_left_link4" ,"panda_right_link2" , true);
+    acm_->setEntry("panda_left_link4" ,"panda_right_link3" , true);
+    acm_->setEntry("panda_left_link4" ,"panda_right_link4" , true);
+    acm_->setEntry("panda_left_link5" ,"panda_left_link6" , true);
+    acm_->setEntry("panda_left_link5" ,"panda_left_link7" , true);
+    acm_->setEntry("panda_left_link5" ,"panda_right_link0" , true);
+    acm_->setEntry("panda_left_link5" ,"panda_right_link1" , true);
+    acm_->setEntry("panda_left_link5" ,"panda_right_link2" , true);
+    acm_->setEntry("panda_left_link6" ,"panda_left_link7" , true);
+    acm_->setEntry("panda_left_link6" ,"panda_left_rightfinger" , true);
+    acm_->setEntry("panda_left_link6" ,"panda_right_link0" , true);
+    acm_->setEntry("panda_left_link6" ,"panda_right_link1" , true);
+    acm_->setEntry("panda_left_link7" ,"panda_left_rightfinger" , true);
+    acm_->setEntry("panda_left_link7" ,"panda_right_link0" , true);
+    acm_->setEntry("panda_left_link7" ,"panda_right_link1" , true);
+    acm_->setEntry("panda_left_rightfinger" ,"panda_right_link0" , true);
+    acm_->setEntry("panda_left_rightfinger" ,"panda_right_rightfinger" , true);
+    acm_->setEntry("panda_right_hand" ,"panda_right_leftfinger" , true);
+    acm_->setEntry("panda_right_hand" ,"panda_right_link3" , true);
+    acm_->setEntry("panda_right_hand" ,"panda_right_link4" , true);
+    acm_->setEntry("panda_right_hand" ,"panda_right_link5" , true);
+    acm_->setEntry("panda_right_hand" ,"panda_right_link6" , true);
+    acm_->setEntry("panda_right_hand" ,"panda_right_link7" , true);
+    acm_->setEntry("panda_right_hand" ,"panda_right_rightfinger" , true);
+    acm_->setEntry("panda_right_leftfinger" ,"panda_right_link3" , true);
+    acm_->setEntry("panda_right_leftfinger" ,"panda_right_link4" , true);
+    acm_->setEntry("panda_right_leftfinger" ,"panda_right_link6" , true);
+    acm_->setEntry("panda_right_leftfinger" ,"panda_right_link7" , true);
+    acm_->setEntry("panda_right_leftfinger" ,"panda_right_rightfinger" , true);
+    acm_->setEntry("panda_right_link0" ,"panda_right_link1" , true);
+    acm_->setEntry("panda_right_link0" ,"panda_right_link2" , true);
+    acm_->setEntry("panda_right_link0" ,"panda_right_link3" , true);
+    acm_->setEntry("panda_right_link0" ,"panda_right_link4" , true);
+    acm_->setEntry("panda_right_link1" ,"panda_right_link2" , true);
+    acm_->setEntry("panda_right_link1" ,"panda_right_link3" , true);
+    acm_->setEntry("panda_right_link1" ,"panda_right_link4" , true);
+    acm_->setEntry("panda_right_link2" ,"panda_right_link3" , true);
+    acm_->setEntry("panda_right_link2" ,"panda_right_link4" , true);
+    acm_->setEntry("panda_right_link3" ,"panda_right_link4" , true);
+    acm_->setEntry("panda_right_link3" ,"panda_right_link5" , true);
+    acm_->setEntry("panda_right_link3" ,"panda_right_link6" , true);
+    acm_->setEntry("panda_right_link3" ,"panda_right_link7" , true);
+    acm_->setEntry("panda_right_link3" ,"panda_right_rightfinger" , true);
+    acm_->setEntry("panda_right_link4" ,"panda_right_link5" , true);
+    acm_->setEntry("panda_right_link4" ,"panda_right_link6" , true);
+    acm_->setEntry("panda_right_link4" ,"panda_right_link7" , true);
+    acm_->setEntry("panda_right_link4" ,"panda_right_rightfinger" , true);
+    acm_->setEntry("panda_right_link5" ,"panda_right_link6" , true);
+    acm_->setEntry("panda_right_link5" ,"panda_right_link7" , true);
+    acm_->setEntry("panda_right_link6" ,"panda_right_link7" , true);
+    acm_->setEntry("panda_right_link6" ,"panda_right_rightfinger" , true);
+    acm_->setEntry("panda_right_link7" ,"panda_right_rightfinger" , true);
+
+    crobot_.reset(new DefaultCRobotType(robot_model_));
+    cworld_.reset(new DefaultCWorldType());
+    robot_state_.reset(new robot_state::RobotState(robot_model_));
+    setToHome(*robot_state_);
+  }
+
+public:
+  bool robot_model_ok_;
+
+  robot_model::RobotModelPtr robot_model_;
+  collision_detection::CollisionRobotPtr crobot_;
+  collision_detection::CollisionWorldPtr cworld_;
+
+  collision_detection::AllowedCollisionMatrixPtr acm_;
+
+  robot_state::RobotStatePtr robot_state_;
+
+};
+
 class KinematicChainValidityChecker : public ompl::base::StateValidityChecker // to find valid state space configurations
 {
 public:
+    PandaCollisionCheck collision_checker;
     KinematicChainValidityChecker(const ompl::base::SpaceInformationPtr &si) : ompl::base::StateValidityChecker(si)
     {
     }
 
-    // bool isValid(const ompl::base::State *state) const override
-    // {
-    // }
+    bool isValid(const ompl::base::State *state) const override
+    {
+        const KinematicChainSpace *space = si_->getStateSpace()->as<KinematicChainSpace>();
+        // const auto *s = state->as<KinematicChainSpace::StateType>();
+        const auto *s = state->as<ob::RealVectorStateSpace::StateType>();
+        
+        return isValidImpl(space, s);
+    }
 
 protected:
-    
+    bool isValidImpl(const KinematicChainSpace *space, const KinematicChainSpace::StateType *s) const
+    {
+        robot_state::RobotState state1(collision_checker.robot_model_);
+        for (int i = 0; i < 14; i++)
+            state1.setJointPositions(panda_joint_names[i], &s->values[i]);
+        state1.update();
+
+        return !selfCollisionCheck(&state1);
+    }
+
+    bool selfCollisionCheck(const robot_state::RobotState *state) const
+    {   
+        collision_detection::CollisionRequest req;
+        collision_detection::CollisionResult res;
+        collision_checker.crobot_->checkSelfCollision(req, res, *state, *collision_checker.acm_);
+        
+        /* COLLISION : TRUE, SAFE : FALSE*/
+        return res.collision;
+    }
+
+    bool RobotWorldCollision() const
+    {
+
+        // collision_detection::CollisionRequest req;
+        // collision_detection::CollisionResult res;
+        // req.max_contacts = 10;
+        // req.contacts = true;
+        // req.verbose = true;
+
+        // shapes::Shape *shape = new shapes::Box(.4, .4, .4);
+        // shapes::ShapeConstPtr shape_ptr(shape);
+        // Eigen::Isometry3d pos1 = Eigen::Isometry3d::Identity();
+        // pos1.translation().z() = 0.3;
+        // cworld_->getWorld()->addToObject("box", shape_ptr, pos1);
+
+        // shapes::Mesh* m = shapes::createMeshFromResource("home/jiyeong/catkin_ws/src/1_assembly/grasping_point/STEFAN/stl/assembly.stl");
+        // shapes::ShapeConstPtr shape_ptr2(m);
+        // Eigen::Isometry3d pos1 = Eigen::Isometry3d::Identity();
+        // pos1.translation().x() = 0.3;
+        // // shapes_msgs::Mesh mesh;
+        // // shapes::ShapeMsg mesh_msg;
+        // // /** \brief Construct the message that corresponds to the shape. Return false on failure. */
+        // // shapes::constructMsgFromShape(m, mesh_msg);
+        // // mesh = boost::get<shapes_msgs::Mesh>(mesh_msg);
+        
+        // cworld_->checkRobotCollision(req, res, *crobot_, *robot_state_, *acm_);
+        // ASSERT_TRUE(res.collision);
+        // ASSERT_GE(res.contact_count, 3u);
+        // res.clear();
+    }
 };
+
 
 #endif

@@ -230,9 +230,9 @@ public:
          Valid step size for manifold traversal with delta*/
     void setConstrainedOptions()
     {
-        c_opt.delta =  0.8; //0.18
+        c_opt.delta =  0.9; //0.18
         c_opt.lambda = 3.0;
-        c_opt.tolerance = 0.02; // 0.05
+        c_opt.tolerance = 0.005; // 0.02
         c_opt.time = 600.;
         c_opt.tries = 100;
         c_opt.range = 0;
@@ -446,49 +446,19 @@ public:
 
         if (stat)
         {
-            // Get solution and validate
-            // auto path = ss->getSolutionPath();
             ompl::geometric::PathGeometric path = ss->getSolutionPath();
             if (!path.check())
                 OMPL_WARN("Path fails check!");
 
             if (stat == ob::PlannerStatus::APPROXIMATE_SOLUTION)
                 OMPL_WARN("Solution is approximate.");
-
-            /* Interpolate and validate interpolated solution path.
-            Insert a number of states in a path so that the
-                path is made up of exactly \e count states. States are
-                inserted uniformly (more states on longer
-                segments). Changes are performed only if a path has
-                less than \e count states.
-
-             void ompl::geometric::PathGeometric::interpolate()
-            {
-                std::vector<base::State *> newStates;
-                const int segments = states_.size() - 1;
-            
-                for (int i = 0; i < segments; ++i)
-                {
-                    base::State *s1 = states_[i];
-                    base::State *s2 = states_[i + 1];
-            
-                    newStates.push_back(s1);
-                    unsigned int n = si_->getStateSpace()->validSegmentCount(s1, s2);
-            
-                    std::vector<base::State *> block;
-                    si_->getMotionStates(s1, s2, block, n - 1, false, true);
-                    newStates.insert(newStates.end(), block.begin(), block.end());
-                }
-                newStates.push_back(states_[segments]);
-                states_.swap(newStates);
-            }
-            */
+            OMPL_INFORM("Interpolating path ... ");
             path.interpolate();
 
             if (output)
             {
                 OMPL_INFORM("Dumping path to `%s_path.txt`.", name.c_str());
-                std::ofstream pathfile((boost::format("%1%_path.txt") % name).str());
+                std::ofstream pathfile((boost::format("%1%_path.txt") % name).str()); //, std::ios::app);
                 path.printAsMatrix(pathfile);
                 pathfile.close();
             }

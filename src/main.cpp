@@ -73,88 +73,14 @@ public:
         : KinematicChainValidityChecker(si)
     {
     }
-
-    // bool isValid(const ob::State *state) const override
-    // {
-    //     auto &&space = si_->getStateSpace()->as<ob::ConstrainedStateSpace>()->getSpace()->as<KinematicChainSpace>();
-    //     auto &&s = state->as<ob::ConstrainedStateSpace::StateType>()->getState()->as<KinematicChainSpace::StateType>();
-    //     return isValidImpl(space, s);
-    // }
+    bool isValid(const ob::State *state) const override
+    {
+        auto &&space = si_->getStateSpace()->as<ob::ConstrainedStateSpace>()->getSpace()->as<KinematicChainSpace>();
+        auto &&s = state->as<ob::ConstrainedStateSpace::StateType>()->getState()->as<KinematicChainSpace::StateType>();
+        std::cout << isValidImpl(space, s) << std::endl;
+        return isValidImpl(space, s);
+    }
 };
-class PositionConstraint : public ob::Constraint
-{
-public:
-    /* ob::Constraint(a, b) : a is dimension of the ambient space, b is constraint ouputs*/
-    PositionConstraint(unsigned int links, Eigen::VectorXd start) : ob::Constraint(links, 1, 5e-3)
-    {
-        for (int i = 0; i < 7; i++)
-        {
-            left_qinit[i] = start[i];
-            right_qinit[i] = start[i + 7];
-        }
-
-        left_arm = std::make_shared<FrankaModelUpdater>(left_q);
-        right_arm = std::make_shared<FrankaModelUpdater>(right_q);
-        rot_jaco_ = std::make_shared<rot_jaco>();
-
-        left_init = left_arm->getTransform(left_qinit);
-        right_init = right_arm->getTransform(right_qinit);
-        init = left_init.inverse() * right_init;
-    }
-
-    /*actual constraint function, state "x" from the ambient space */
-    void function(const Eigen::Ref<const Eigen::VectorXd> &x, Eigen::Ref<Eigen::VectorXd> out) const override
-    {
-
-        Eigen::VectorXd &&temp = x.segment(0, 7);
-        Eigen::VectorXd &&temp2 = x.segment(7, 7);
-
-        Eigen::Affine3d lt = left_arm->getTransform(temp);
-        Eigen::Affine3d rt = right_arm->getTransform(temp2);
-
-        Eigen::Affine3d result = lt.inverse() * rt;
-
-        out[0] = (result.translation() - init.translation()).squaredNorm(); //only position
-        std::cout << "POSITION f : " << out << std::endl;
-    }
-
-    void jacobian(const Eigen::Ref<const Eigen::VectorXd> &x, Eigen::Ref<Eigen::MatrixXd> out) const override
-    {
-        Eigen::VectorXd &&temp = x.segment(0, 7);
-        Eigen::VectorXd &&temp2 = x.segment(7, 7);
-
-        Eigen::Matrix<double, 3, 7> Jv_l = left_arm->getJacobian(temp).block<3, 7>(0, 0);
-        Eigen::Matrix<double, 3, 7> Jv_r = right_arm->getJacobian(temp2).block<3, 7>(0, 0);
-        Eigen::Affine3d lt = left_arm->getTransform(temp);
-        Eigen::Affine3d rt = right_arm->getTransform(temp2);
-        Eigen::Affine3d result = lt.inverse() * rt;
-
-        Eigen::Vector3d p = rt.translation() - lt.translation();
-        Eigen::Matrix<double, 3, 9> tmp;
-        tmp.setZero();
-        tmp.block<1, 3>(0, 0) = p.transpose();
-        tmp.block<1, 3>(1, 3) = p.transpose();
-        tmp.block<1, 3>(2, 6) = p.transpose();
-
-        Eigen::Matrix<double, 3, 14> j;
-        j.block<3, 7>(0, 0) = tmp * rot_jaco_->jaco(temp) - lt.linear() * Jv_l;
-        j.block<3, 7>(0, 7) = lt.linear().transpose() * Jv_r;
-
-        out.row(0) = 2 * (result.translation().transpose() - init.translation().transpose()) * j;
-        // std::cout << out << std::endl;
-    }
-
-private:
-    Eigen::Matrix<double, 7, 1> left_q, right_q;
-    Eigen::Matrix<double, 7, 1> left_qinit, right_qinit;
-    Eigen::Affine3d left_init, right_init, init;
-
-    std::shared_ptr<FrankaModelUpdater> init_left_arm, left_arm;
-    std::shared_ptr<FrankaModelUpdater> right_arm, init_right_arm;
-    std::shared_ptr<rot_jaco> rot_jaco_;
-    Eigen::Matrix<double, 4, 4> init_;
-};
-
 
 class KinematicChainConstraint : public ob::Constraint
 {
@@ -190,7 +116,6 @@ public:
         Eigen::Affine3d rt = right_base * right_arm->getTransform(temp2);
 
         Eigen::Affine3d result = lt.inverse() * rt;
-        
         
         double r;
         Eigen::Quaterniond cur_q(result.linear());
@@ -256,7 +181,7 @@ private:
 bool planning(ConstrainedProblem &cp, ompl::geometric::PathGeometric &path, std::string file_name)
 {
     clock_t start_time = clock();
-    ob::PlannerStatus stat = cp.solveOnce(true, file_name);
+    ob::PlannerStatus stat = cp.solveOnce(true);
     clock_t end_time = clock();
 
     // if (stat)
@@ -268,13 +193,12 @@ bool planning(ConstrainedProblem &cp, ompl::geometric::PathGeometric &path, std:
     return stat;
 }
 
-ompl::geometric::PathGeometric plannedPath(Eigen::VectorXd start, Eigen::VectorXd goal, std::string file_name)
+bool plannedPath(Eigen::VectorXd start, Eigen::VectorXd goal, std::string file_name)
 {
     auto ss = std::make_shared<KinematicChainSpace>(links);
     enum SPACE_TYPE space = PJ; //"PJ", "AT", "TB"
     std::vector<enum PLANNER_TYPE> planners = {RRT}; //RRTConnect
 
-    
     std::cout << "init state   : " << start.transpose() << std::endl;
     std::cout << "target state : " << goal.transpose() << std::endl;
 
@@ -287,13 +211,11 @@ ompl::geometric::PathGeometric plannedPath(Eigen::VectorXd start, Eigen::VectorX
     cp.setPlanner(planners[0]);
     
     // Get the maximum value a call to distance() can return (or an upper bound). For unbounded state spaces, this function can return infinity. More
-    cout << cp.css->getMaximumExtent() << endl; // 18.4372
-    // cp.ss->setStateValidityChecker(std::make_shared<ConstrainedKinematicChainValidityChecker>(cp.csi));
+    // cout << cp.css->getMaximumExtent() << endl; // 18.4372
+    cp.ss->setStateValidityChecker(std::make_shared<ConstrainedKinematicChainValidityChecker>(cp.csi));
     ompl::geometric::PathGeometric path(cp.csi);
-    if (planning(cp, path, file_name))
-        return path;
-    else
-        OMPL_ERROR("PLANNING FAILED");
+    return (planning(cp, path, file_name));
+     
 }
 
 void execute_path(std::string path_name, moveit::planning_interface::MoveGroupInterface& move_group, double total_time = 7)
@@ -332,13 +254,10 @@ void execute_path(std::string path_name, moveit::planning_interface::MoveGroupIn
 
     robot_trajectory.joint_trajectory = joint_trajectory;
     cout << "PUBLISHED" << endl;
-
-
     moveit::planning_interface::MoveGroupInterface::Plan plan;
     plan.trajectory_ = robot_trajectory;
     plan.planning_time_ = total_time;
     move_group.execute(plan);
-    ros::WallDuration(10.0).sleep();
     cout << "EXECUTE" << endl;
 }
 
@@ -361,24 +280,22 @@ int main(int argc, char **argv)
     {
         ros::spinOnce();
     }
-    // moveit_msgs::DisplayTrajectory display_trajectory;
-    // robot_state::robotStateToRobotStateMsg(*robot_state, display_trajectory.trajectory_start);
-    // display_trajectory.model_id = "panda";
-
+    
     /* PLANNING AND RETURN PLANNED PATH */
     Eigen::VectorXd start(links), goal(links);
-    start.setZero();
-    goal.setZero();
-    start << -1.278022704113855, 0.7599595568823166, 0.8504105865120947, -2.2532133470941753, -1.1298611922879744, 2.521625636015966, 2.2355349196620695,  0.025852137525551332, -0.012156381609418291, 0.28454053715882205, -1.996989239487609, 0.1902084893722976, 1.937095545026834, 2.0326259015811394;
-    goal << 1.7774068066631177, -1.6071385556188158, -1.4847508757964791, -1.889774699489722, -0.9339935055363789, 1.6617390338964741, 2.582642192418717,  0.8231283220077812, 0.7854915462891668, -1.3605836081236864, -1.3645664916893638, 1.4984756557502872, 1.03801815440285, 1.8101569484820168;
-    ompl::geometric::PathGeometric path_(plannedPath(start, goal, "1"));
-    execute_path("/home/jiyeong/catkin_ws/1_path.txt", move_group);
+
+    // start.setZero();
+    // goal.setZero();
+    // start << -1.278022704113855, 0.7599595568823166, 0.8504105865120947, -2.2532133470941753, -1.1298611922879744, 2.521625636015966, 2.2355349196620695,  0.025852137525551332, -0.012156381609418291, 0.28454053715882205, -1.996989239487609, 0.1902084893722976, 1.937095545026834, 2.0326259015811394;
+    // goal << 1.7774068066631177, -1.6071385556188158, -1.4847508757964791, -1.889774699489722, -0.9339935055363789, 1.6617390338964741, 2.582642192418717,  0.8231283220077812, 0.7854915462891668, -1.3605836081236864, -1.3645664916893638, 1.4984756557502872, 1.03801815440285, 1.8101569484820168;
+    // plannedPath(start, goal, "1");
+    // execute_path("/home/jiyeong/catkin_ws/1_path.txt", move_group);
     
     // start.setZero();
     // goal.setZero();
     // start << 1.7774068066631177, -1.6071385556188158, -1.4847508757964791, -1.889774699489722, -0.9339935055363789, 1.6617390338964741, 2.582642192418717,  0.8231283220077812, 0.7854915462891668, -1.3605836081236864, -1.3645664916893638, 1.4984756557502872, 1.03801815440285, 1.8101569484820168;
     // goal << 1.7964825792215433, -1.4608329426331506, -1.5601839208321042, -1.9023645158590405, -0.5018620082517232, 2.029607475617737, 2.6516940006355156, 1.9134626801325931, -0.8272316695119547, -1.6818612100242758, -1.8767001731565196, 0.46704141331047666, 2.10534748329074, 2.2395795202166964;
-    // ompl::geometric::PathGeometric path2_(plannedPath(start, goal, "2"));
+    // plannedPath(start, goal, "2");
     // execute_path("/home/jiyeong/catkin_ws/2.txt", move_group);
     // ros::WallDuration(10.0).sleep();
 
@@ -386,9 +303,17 @@ int main(int argc, char **argv)
     // goal.setZero();
     // start << 1.7964825792215433, -1.4608329426331506, -1.5601839208321042, -1.9023645158590405, -0.5018620082517232, 2.029607475617737, 2.6516940006355156, 1.9134626801325931, -0.8272316695119547, -1.6818612100242758, -1.8767001731565196, 0.46704141331047666, 2.10534748329074, 2.2395795202166964;
     // goal <<  1.699059698012825, -1.7031600686437707, -1.5601096577679954, -1.742651411228564, -0.26001397984819996, 1.859883480955693, 2.4405694939121227, 0.252032751296342, 0.8481168795391635, -0.7850492071727834, -1.7340252218533394, 1.7612539500692608, 0.8689462263242886, 1.5201191679260264;
-    // ompl::geometric::PathGeometric path3_(plannedPath(start, goal, "3"));
+    // plannedPath(start, goal, "3");
 
-    // execute_path("/home/jiyeong/catkin_ws/test.txt", move_group);
+
+    // 0.6cm 간격일때
+    start.setZero();
+    goal.setZero();
+    start << 1.724232164642815, -1.6869073124631602, -1.4320308750075856, -1.6922132580732796, -0.9959997578244485, 1.4547076011710542, 2.410820584020732, 2.345953104979997, -0.9109013835952869, -1.814988937554947, -1.4927633631005977, -7.949861612059433e-05, 1.8887562745648154, 2.400458215415575;
+    goal << -1.39258467601273, 1.1450542368090963, 1.3567036879943393, -1.7602722008928466, -0.10617590217056297, 1.912094626772453, 2.2625711904628996, -1.1050391746038768, 1.1816216109655286, 1.5050052121830346, -1.9737531616591852, 0.054494485403056375, 2.3870565089748568, 2.4392020251436484;
+
+    plannedPath(start, goal, "2");
+    execute_path("/home/jiyeong/catkin_ws/projection_path.txt", move_group);
   
 
 }

@@ -13,6 +13,7 @@ find_package(catkin REQUIRED COMPONENTS
   moveit_simple_controller_manager
   moveit_planners_ompl
   moveit_visual_tools
+  moveit_resources
 )
 
 LIST( APPEND CMAKE_MODULE_PATH "$ENV{HOME}/cmake" )
@@ -52,6 +53,7 @@ include_directories(
     ${RBDL_INCLUDE_DIRS}
     ${Boost_INCLUDE_DIRS}
     ${OMPL_INCLUDE_DIRS}
+    ${moveit_resources_INCLUDE_DIRS}
 )
 
 link_directories(${Boost_LIBRARY_DIR})
