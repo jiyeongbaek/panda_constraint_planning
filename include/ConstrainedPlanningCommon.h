@@ -229,29 +229,14 @@ public:
     /* . The distance between each point in the discrete geodesic is tuned by the "delta" parameter
          Valid step size for manifold traversal with delta*/
     void setConstrainedOptions()
-    {
-        c_opt.delta =  0.9; //0.18
-        c_opt.lambda = 3.0;
-        c_opt.tolerance = 0.005; // 0.02
-        c_opt.time = 600.;
+    {   
+        // rrt 되는거
+        c_opt.delta =  0.20; //0.20
+        c_opt.lambda = 2.0;
+        c_opt.tolerance = 0.045; // 0.05 ok little bit
+        c_opt.time = 100.;
         c_opt.tries = 100;
-        c_opt.range = 0;
-        
-        /* POSE CONSTRAINT PARAMETER */
-        // c_opt.delta =  0.1;
-        // c_opt.lambda = 3;
-        // c_opt.tolerance = 1e-3; //1.5
-        // c_opt.time = 600.;
-        // c_opt.tries = 600;
-        // c_opt.range = 0;
-
-        /* ORIENTATION CONSTRAINT PARAMETER */
-        // c_opt.delta =  0.5;
-        // c_opt.lambda = 3;
-        // c_opt.tolerance = 1.2; //1.5
-        // c_opt.time = 1000.;
-        // c_opt.tries = 500;
-        // c_opt.range = 0;
+        c_opt.range = 6;
 
         constraint->setTolerance(c_opt.tolerance);
         constraint->setMaxIterations(c_opt.tries);
@@ -271,13 +256,15 @@ public:
         static const unsigned int ATLAS_STATE_SPACE_MAX_CHARTS_PER_EXTENSION = 200;
         static const double ATLAS_STATE_SPACE_BACKOFF = 0.75;
         */
-
-        a_opt.epsilon = 1.0;
-        a_opt.rho = 0.03; //::CONSTRAINED_STATE_SPACE_DELTA * om::ATLAS_STATE_SPACE_RHO_MULTIPLIER;
-        a_opt.exploration = 0.20; // om::ATLAS_STATE_SPACE_EXPLORATION;
+        //// Consider decreasing rho and/or the exploration paramter if this becomes a problem.
+        // OMPL_WARN("ompl::base::AtlasStateSpace::sampleUniform(): "
+        //           "Took too long; returning center of a random chart.");
+        a_opt.epsilon = 0.1; //1.0
+        a_opt.rho = 0.01; //::CONSTRAINED_STATE_SPACE_DELTA * om::ATLAS_STATE_SPACE_RHO_MULTIPLIER; //the maximum radius for which a chart is valid. Default 0.1.
+        a_opt.exploration = 0.05; // om::ATLAS_STATE_SPACE_EXPLORATION;
         a_opt.alpha = om::ATLAS_STATE_SPACE_ALPHA;
         a_opt.bias = false;
-        a_opt.separate = true; //default : false
+        a_opt.separate = false; //default : false
         a_opt.charts = om::ATLAS_STATE_SPACE_MAX_CHARTS_PER_EXTENSION;
 
         if (!(type == AT || type == TB))
@@ -456,11 +443,13 @@ public:
             path.interpolate();
 
             if (output)
-            {
-                OMPL_INFORM("Dumping path to `%s_path.txt`.", name.c_str());
-                std::ofstream pathfile((boost::format("%1%_path.txt") % name).str()); //, std::ios::app);
+            {                
+                // std::ofstream pathfile((boost::format("%1%_path.txt") % name).str()); //, std::ios::app);
+                std::ofstream pathfile("/home/jiyeong/catkin_ws/" + name + "_path.txt"); 
                 path.printAsMatrix(pathfile);
+                OMPL_INFORM("Dumping path to `%s_path.txt`.", name.c_str());
                 pathfile.close();
+                
             }
         }
         else
@@ -477,9 +466,9 @@ public:
         bench->addExperimentParameter("k", "INTEGER", std::to_string(constraint->getManifoldDimension()));
         bench->addExperimentParameter("n - k", "INTEGER", std::to_string(constraint->getCoDimension()));
         bench->addExperimentParameter("space", "INTEGER", std::to_string(type));
-
+        
         request = ot::Benchmark::Request(c_opt.time, 2048, 100, 0.1, true, false, true, true);
-
+        
         for (auto planner : planners)
             bench->addPlanner(getPlanner(planner, problem));
 

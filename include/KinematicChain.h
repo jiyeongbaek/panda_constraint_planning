@@ -49,6 +49,10 @@
 #include <boost/format.hpp>
 #include <fstream>
 
+#include <Eigen/Geometry>
+#include <Eigen/Dense>
+#include <chrono>
+using namespace Eigen;
 // simply use a random projection
 class KinematicChainProjector : public ompl::base::ProjectionEvaluator
 {
@@ -422,6 +426,17 @@ public:
     cworld_.reset(new DefaultCWorldType());
     robot_state_.reset(new robot_state::RobotState(robot_model_));
     setToHome(*robot_state_);
+
+    base_.reset(new DefaultCWorldType());
+
+    shapes::Shape* box = new shapes::Box(2.4, 1.2, 0.6);
+    shapes::ShapeConstPtr box_ptr(box);
+    Eigen::Isometry3d box_pos{Eigen::Isometry3d::Identity()};
+    box_pos.translation().x() = 1.0;
+    box_pos.translation().y() = 0.0;
+    box_pos.translation().z() = 0.10; // bos : 0.6, z : 0.23 됨!
+    base_->getWorld()->addToObject("box", box_ptr, box_pos);
+
   }
 
 public:
@@ -430,7 +445,7 @@ public:
   robot_model::RobotModelPtr robot_model_;
   collision_detection::CollisionRobotPtr crobot_;
   collision_detection::CollisionWorldPtr cworld_;
-
+  collision_detection::CollisionWorldPtr base_;
   collision_detection::AllowedCollisionMatrixPtr acm_;
 
   robot_state::RobotStatePtr robot_state_;
@@ -441,8 +456,21 @@ class KinematicChainValidityChecker : public ompl::base::StateValidityChecker //
 {
 public:
     PandaCollisionCheck collision_checker;
+    shapes::ShapeConstPtr shape_ptr;
+    Affine3d obj_Lgrasp, Lgrasp_obj;
     KinematicChainValidityChecker(const ompl::base::SpaceInformationPtr &si) : ompl::base::StateValidityChecker(si)
     {
+        shapes::Mesh* stefan = shapes::createMeshFromResource("file:///home/jiyeong/catkin_ws/src/1_assembly/grasping_point/STEFAN/stl/assembly_fcl2.stl");
+        shape_ptr = shapes::ShapeConstPtr(stefan);
+
+        Vector3d z_offset(0, 0, -0.109);
+
+        Quaterniond q_Lgrasp(0.48089 , 0.518406, -0.518406, 0.48089);
+        obj_Lgrasp.linear() = Quaterniond(0.48089 , 0.518406, -0.518406, 0.48089).toRotationMatrix();
+        obj_Lgrasp.translation() = Vector3d(-0.417291983962059, 0.385170965965183, 0.189059236695616) + obj_Lgrasp.linear() * z_offset;
+
+        Lgrasp_obj = obj_Lgrasp.inverse();
+
     }
 
     bool isValid(const ompl::base::State *state) const override
@@ -462,7 +490,7 @@ protected:
             state1.setJointPositions(panda_joint_names[i], &s->values[i]);
         state1.update();
 
-        return !selfCollisionCheck(&state1);
+        return !ObjectWorldCollision(&state1) && !selfCollisionCheck(&state1);
     }
 
     bool selfCollisionCheck(const robot_state::RobotState *state) const
@@ -475,35 +503,36 @@ protected:
         return res.collision;
     }
 
-    bool RobotWorldCollision() const
-    {
+    bool ObjectWorldCollision(const robot_state::RobotState *state) const
+    {   
+        // std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
+        collision_detection::CollisionRequest req;
+        collision_detection::CollisionResult res;
+        req.max_contacts = 10;
+        req.contacts = true;
+        req.verbose = false;
 
-        // collision_detection::CollisionRequest req;
-        // collision_detection::CollisionResult res;
-        // req.max_contacts = 10;
-        // req.contacts = true;
-        // req.verbose = true;
-
-        // shapes::Shape *shape = new shapes::Box(.4, .4, .4);
-        // shapes::ShapeConstPtr shape_ptr(shape);
-        // Eigen::Isometry3d pos1 = Eigen::Isometry3d::Identity();
-        // pos1.translation().z() = 0.3;
-        // cworld_->getWorld()->addToObject("box", shape_ptr, pos1);
-
-        // shapes::Mesh* m = shapes::createMeshFromResource("home/jiyeong/catkin_ws/src/1_assembly/grasping_point/STEFAN/stl/assembly.stl");
-        // shapes::ShapeConstPtr shape_ptr2(m);
-        // Eigen::Isometry3d pos1 = Eigen::Isometry3d::Identity();
-        // pos1.translation().x() = 0.3;
-        // // shapes_msgs::Mesh mesh;
-        // // shapes::ShapeMsg mesh_msg;
-        // // /** \brief Construct the message that corresponds to the shape. Return false on failure. */
-        // // shapes::constructMsgFromShape(m, mesh_msg);
-        // // mesh = boost::get<shapes_msgs::Mesh>(mesh_msg);
+        Eigen::Affine3d base_Lgrasp, object_pos;
+        base_Lgrasp = state->getFrameTransform("panda_left_hand"); // base to panda_left_hand
+        object_pos = base_Lgrasp * Lgrasp_obj;
+        Eigen::Isometry3d pos1;
+        pos1.translation().x() = object_pos.translation()[0];
+        pos1.translation().y() = object_pos.translation()[1];
+        pos1.translation().z() = object_pos.translation()[2];
+        pos1.linear() = object_pos.linear();
+    
+        // collision_checker.acm_->setEntry("panda_right_rightfinger", "stefan", true);
+        // collision_checker.acm_->setEntry("panda_right_leftfinger", "stefan", true);
+        // collision_checker.acm_->setEntry("panda_left_rightfinger", "stefan", true);
+        // collision_checker.acm_->setEntry("panda_left_leftfinger", "stefan", true);
+        collision_checker.cworld_->getWorld()->addToObject("stefan", shape_ptr, pos1);
+        collision_checker.cworld_->checkWorldCollision(req, res, *collision_checker.base_);
         
-        // cworld_->checkRobotCollision(req, res, *crobot_, *robot_state_, *acm_);
-        // ASSERT_TRUE(res.collision);
-        // ASSERT_GE(res.contact_count, 3u);
-        // res.clear();
+        // std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
+        // std::cout << std::chrono::duration_cast<std::chrono::seconds>(end - begin).count() << " s" << std::endl;
+
+        /* COLLISION : TRUE, SAFE : FALSE*/
+        return res.collision;
     }
 };
 

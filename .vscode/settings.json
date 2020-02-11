@@ -101,7 +101,8 @@
         "hash_set": "cpp",
         "glbeginendadapter": "cpp",
         "renderinfo": "cpp",
-        "polytope": "cpp"
+        "polytope": "cpp",
+        "program": "cpp"
     },
     "ros.distro": "melodic",
     "python.autoComplete.extraPaths": [
