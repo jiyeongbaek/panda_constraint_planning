@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <package format="2">
-  <name>moveit_ompl</name>
+  <name>constraint_planner</name>
   <version>0.0.0</version>
   <description>The panda_core package</description>
 

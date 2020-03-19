@@ -1,4 +1,4 @@
-#include "panda_model_updater.h"
+#include <constraint_planner/panda_model_updater.h>
 
 // arm_arm_state__// arm_arm_state__
 void FrankaModelUpdater::PandaRBDLModel()

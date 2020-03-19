@@ -1,6 +1,6 @@
 cmake_minimum_required (VERSION 2.6)
 
-project (moveit_ompl)
+project (constraint_planner)
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 find_package(catkin REQUIRED COMPONENTS
@@ -57,7 +57,7 @@ include_directories(
 )
 
 link_directories(${Boost_LIBRARY_DIR})
-add_executable(test src/main.cpp src/panda_model_updater.cpp)
+add_executable(test src/main.cpp src/panda_model_updater.cpp src/No_RRT.cpp)
 
 target_link_libraries (test              
                       ${catkin_LIBRARIES}          
@@ -65,3 +65,13 @@ target_link_libraries (test
                        ${Boost_LIBRARIES}
                        rbdl
                        fcl)
+
+
+add_executable(ik_projection src/ik_projection.cpp src/panda_model_updater.cpp)
+
+target_link_libraries (ik_projection              
+                      ${catkin_LIBRARIES}          
+                       ${OMPL_LIBRARIES}
+                       ${Boost_LIBRARIES}
+                       rbdl
+                      )

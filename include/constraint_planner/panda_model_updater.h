@@ -2,7 +2,8 @@
 
 // #include <Eigen/Dense>
 #include <Eigen/Core>
-#include "model.h"
+#include <constraint_planner/model.h>
+
 #include <rbdl/rbdl.h>
 #include <iostream>
 #include <memory>

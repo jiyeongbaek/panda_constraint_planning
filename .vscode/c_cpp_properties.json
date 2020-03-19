@@ -3,13 +3,40 @@
         {
             "browse": {
                 "databaseFilename": "",
-                "limitSymbolsToIncludedHeaders": true
+                "limitSymbolsToIncludedHeaders": true,
+                "path": [
+                    "/home/jiyeong/catkin_ws/devel/include/**",
+                    "/opt/ros/melodic/include/**",
+                    "/home/jiyeong/catkin_ws/src/CBiRRT_franka_dual_arm/include/**",
+                    "/home/jiyeong/catkin_ws/src/1_assembly/assembly_rrt_planning/include/**",
+                    "/home/jiyeong/catkin_ws/src/1_assembly/assembly_with_vrep/include/**",
+                    "/home/jiyeong/catkin_ws/src/franka_ros/franka_control/include/**",
+                    "/home/jiyeong/catkin_ws/src/franka_ros/franka_example_controllers/include/**",
+                    "/home/jiyeong/catkin_ws/src/franka_ros/franka_gripper/include/**",
+                    "/home/jiyeong/catkin_ws/src/franka_ros/franka_hw/include/**",
+                    "/home/jiyeong/catkin_ws/src/1_assembly/grasping_point/include/**",
+                    "/home/jiyeong/catkin_ws/src/inverse_kinematics/include/**",
+                    "/home/jiyeong/catkin_ws/src/1_assembly/metric_opt/include/**",
+                    "/home/jiyeong/catkin_ws/src/2_social/moveit_vrep_interface/include/**",
+                    "/home/jiyeong/catkin_ws/src/ompl_constraint_planning_lib/include/**",
+                    "/home/jiyeong/catkin_ws/src/3_dual_constraint_planning/panda_dual/panda_core/include/**",
+                    "/home/jiyeong/catkin_ws/src/python_bindings_tutorial/include/**",
+                    "/home/jiyeong/catkin_ws/src/rrt_planning_python_binding/include/**",
+                    "/home/jiyeong/catkin_ws/src/2_social/single_arm_vrep/include/**",
+                    "/home/jiyeong/catkin_ws/src/2_social/social_vrep_interface/include/**",
+                    "/home/jiyeong/catkin_ws/src/3_dual_constraint_planning/visual_trajectory/include/**",
+                    "/home/jiyeong/catkin_ws/src/3_dual_constraint_planning/yeebot/yeebot_core/include/**",
+                    "/usr/include/**",
+                    "${workspaceFolder}/include",
+                    "${workspaceFolder}"
+                ]
             },
             "includePath": [
                 "/home/jiyeong/catkin_ws/devel/include/**",
                 "/opt/ros/melodic/include/**",
                 "/home/jiyeong/catkin_ws/src/CBiRRT_franka_dual_arm/include/**",
                 "/home/jiyeong/catkin_ws/src/1_assembly/assembly_rrt_planning/include/**",
+                "/home/jiyeong/catkin_ws/src/3_dual_constraint_planning/constraint_planner/include/**",
                 "/home/jiyeong/catkin_ws/src/1_assembly/assembly_with_vrep/include/**",
                 "/home/jiyeong/catkin_ws/src/franka_ros/franka_control/include/**",
                 "/home/jiyeong/catkin_ws/src/franka_ros/franka_example_controllers/include/**",
@@ -26,14 +53,26 @@
                 "/home/jiyeong/catkin_ws/src/2_social/single_arm_vrep/include/**",
                 "/home/jiyeong/catkin_ws/src/2_social/social_vrep_interface/include/**",
                 "/home/jiyeong/catkin_ws/src/3_dual_constraint_planning/visual_trajectory/include/**",
-                "/home/jiyeong/catkin_ws/src/3_dual_constraint_planning/yeebot/yeebot_core/include/**",
-                "/usr/include/**"
+                "/usr/include/**",
+                "${workspaceFolder}/include"
             ],
             "name": "ROS",
             "intelliSenseMode": "gcc-x64",
             "compilerPath": "/usr/bin/gcc",
             "cStandard": "c11",
-            "cppStandard": "c++17"
+            "cppStandard": "c++17",
+            "compilerArgs": []
+        },
+        {
+            "name": "constraint_planner",
+            "includePath": [
+                "${workspaceFolder}/**"
+            ],
+            "defines": [],
+            "compilerPath": "/usr/bin/gcc",
+            "cStandard": "c11",
+            "cppStandard": "c++17",
+            "intelliSenseMode": "clang-x64"
         }
     ],
     "version": 4

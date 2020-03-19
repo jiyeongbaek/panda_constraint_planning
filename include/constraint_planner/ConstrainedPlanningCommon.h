@@ -1,41 +1,4 @@
-/*********************************************************************
-* Software License Agreement (BSD License)
-*
-*  Copyright (c) 2018, Rice University
-*  All rights reserved.
-*
-*  Redistribution and use in source and binary forms, with or without
-*  modification, are permitted provided that the following conditions
-*  are met:
-*
-*   * Redistributions of source code must retain the above copyright
-*     notice, this list of conditions and the following disclaimer.
-*   * Redistributions in binary form must reproduce the above
-*     copyright notice, this list of conditions and the following
-*     disclaimer in the documentation and/or other materials provided
-*     with the distribution.
-*   * Neither the name of the Rice University nor the names of its
-*     contributors may be used to endorse or promote products derived
-*     from this software without specific prior written permission.
-*
-*  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
-*  "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
-*  LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
-*  FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
-*  COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
-*  INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
-*  BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
-*  LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
-*  CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
-*  LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
-*  ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-*  POSSIBILITY OF SUCH DAMAGE.
-*********************************************************************/
-
-/* Author: Zachary Kingston */
-
-#ifndef OMPL_DEMO_CONSTRAINED_COMMON_
-#define OMPL_DEMO_CONSTRAINED_COMMON_
+#pragma once
 
 #include <iostream>
 #include <fstream>
@@ -46,7 +9,8 @@
 #include <ompl/geometric/SimpleSetup.h>
 #include <ompl/geometric/PathGeometric.h>
 
-#include <ompl/base/Constraint.h>
+// #include <ompl/base/Constraint.h>
+#include <constraint_planner/Constraint.h>
 #include <ompl/base/ConstrainedSpaceInformation.h>
 #include <ompl/base/spaces/constraint/ConstrainedStateSpace.h>
 #include <ompl/base/spaces/constraint/AtlasStateSpace.h>
@@ -56,16 +20,11 @@
 #include <ompl/geometric/planners/rrt/RRT.h>
 #include <ompl/geometric/planners/rrt/RRTConnect.h>
 #include <ompl/geometric/planners/rrt/RRTstar.h>
-#include <ompl/geometric/planners/est/EST.h>
-#include <ompl/geometric/planners/est/BiEST.h>
-#include <ompl/geometric/planners/est/ProjEST.h>
-#include <ompl/geometric/planners/bitstar/BITstar.h>
 #include <ompl/geometric/planners/prm/PRM.h>
-#include <ompl/geometric/planners/prm/SPARS.h>
-#include <ompl/geometric/planners/prm/SPARStwo.h>
+#include <constraint_planner/No_RRT.h>
 #include <ompl/geometric/planners/kpiece/KPIECE1.h>
-#include <ompl/geometric/planners/kpiece/BKPIECE1.h>
 
+#include <ompl/geometric/planners/rrt/BiTRRT.h>
 #include <ompl/tools/benchmark/Benchmark.h>
 
 namespace po = boost::program_options;
@@ -77,11 +36,12 @@ namespace ot = ompl::tools;
 enum SPACE_TYPE
 {
     PJ = 0,
-    AT = 1,
-    TB = 2
+    PJ2 = 1,
+    AT = 2,
+    TB = 3
 };
 
-const std::string spaceStr[3] = {"PJ", "AT", "TB"};
+const std::string spaceStr[4] = {"PJ", "PJ2", "AT", "TB"};
 
 std::istream &operator>>(std::istream &in, enum SPACE_TYPE &type)
 {
@@ -91,6 +51,8 @@ std::istream &operator>>(std::istream &in, enum SPACE_TYPE &type)
         type = PJ;
     else if (token == "AT")
         type = AT;
+    else if (token == "PJ2")
+        type = PJ2;
     else if (token == "TB")
         type = TB;
     else
@@ -99,31 +61,13 @@ std::istream &operator>>(std::istream &in, enum SPACE_TYPE &type)
     return in;
 }
 
-void addSpaceOption(po::options_description &desc, enum SPACE_TYPE *space)
-{
-    auto space_msg = "Choose which constraint handling methodology to use. One of:\n"
-                     "PJ - Projection (Default), "
-                     "AT - Atlas, "
-                     "TB - Tangent Bundle.";
-
-    desc.add_options()("space,s", po::value<enum SPACE_TYPE>(space), space_msg);
-}
-
 enum PLANNER_TYPE
 {
     RRT,
-    RRT_I,
     RRTConnect,
-    RRTConnect_I,
-    RRTstar,
-    EST,
-    BiEST,
-    ProjEST,
-    BITstar,
     PRM,
-    SPARS,
-    KPIECE,
-    BKPIECE
+    No_RRT,
+    KPIECE
 };
 
 std::istream &operator>>(std::istream &in, enum PLANNER_TYPE &type)
@@ -132,53 +76,29 @@ std::istream &operator>>(std::istream &in, enum PLANNER_TYPE &type)
     in >> token;
     if (token == "RRT")
         type = RRT;
-    else if (token == "RRT_I")
-        type = RRT_I;
     else if (token == "RRTConnect")
         type = RRTConnect;
-    else if (token == "RRTConnect_I")
-        type = RRTConnect_I;
-    else if (token == "RRTstar")
-        type = RRTstar;
-    else if (token == "EST")
-        type = EST;
-    else if (token == "BiEST")
-        type = BiEST;
-    else if (token == "ProjEST")
-        type = ProjEST;
-    else if (token == "BITstar")
-        type = BITstar;
     else if (token == "PRM")
         type = PRM;
-    else if (token == "SPARS")
-        type = SPARS;
+    else if (token == "No_RRT")
+        type = No_RRT;
+
     else if (token == "KPIECE")
         type = KPIECE;
-    else if (token == "BKPIECE")
-        type = BKPIECE;
+
     else
         in.setstate(std::ios_base::failbit);
 
     return in;
 }
 
-void addPlannerOption(po::options_description &desc, std::vector<enum PLANNER_TYPE> *planners)
-{
-    auto planner_msg = "List of which motion planner to use (multiple if benchmarking, one if planning). Choose from:\n"
-                       "RRT (Default), RRT_I, RRTConnect, RRTConnect_I, RRTstar, "
-                       "EST, BiEST, ProjEST, "
-                       "BITstar, "
-                       "PRM, SPARS, "
-                       "KPIECE, BKPIECE.";
-
-    desc.add_options()("planner,p", po::value<std::vector<enum PLANNER_TYPE>>(planners)->multitoken(), planner_msg);
-}
 
 struct ConstrainedOptions
 {
     double delta;
     double lambda;
-    double tolerance;
+    double tolerance1;
+    double tolerance2;
     double time;
     unsigned int tries;
     double range;
@@ -198,7 +118,7 @@ struct AtlasOptions
 class ConstrainedProblem
 {
 public:
-    ConstrainedProblem(enum SPACE_TYPE type, ob::StateSpacePtr space_, ob::ConstraintPtr constraint_)
+    ConstrainedProblem(enum SPACE_TYPE type, ob::StateSpacePtr space_, Constraint_newPtr constraint_)
       : type(type), space(std::move(space_)), constraint(std::move(constraint_))
     {
         // Combine the ambient state space and the constraint to create the
@@ -207,6 +127,11 @@ public:
         {
             case PJ:
                 OMPL_INFORM("Using Projection-Based State Space!");
+                css = std::make_shared<ob::ProjectedStateSpace>(space, constraint);
+                csi = std::make_shared<ob::ConstrainedSpaceInformation>(css);
+                break;
+            case PJ2:
+                OMPL_INFORM("Using Projection-Based (no random s) State Space!");
                 css = std::make_shared<ob::ProjectedStateSpace>(space, constraint);
                 csi = std::make_shared<ob::ConstrainedSpaceInformation>(css);
                 break;
@@ -231,14 +156,15 @@ public:
     void setConstrainedOptions()
     {   
         // rrt 되는거
-        c_opt.delta =  0.20; //0.20
+        c_opt.delta =  0.075; //0.20
         c_opt.lambda = 2.0;
-        c_opt.tolerance = 0.045; // 0.05 ok little bit
-        c_opt.time = 100.;
-        c_opt.tries = 100;
-        c_opt.range = 6;
+        c_opt.tolerance1 = 0.001; //0.0025
+        c_opt.tolerance2 = 0.01;
+        c_opt.time = 30.;
+        c_opt.tries = 1000;
+        // c_opt.range = 6;
 
-        constraint->setTolerance(c_opt.tolerance);
+        constraint->setTolerance(c_opt.tolerance1, c_opt.tolerance2);
         constraint->setMaxIterations(c_opt.tries);
 
         css->setDelta(c_opt.delta);
@@ -379,41 +305,20 @@ public:
             case RRT:
                 p = createPlannerRange<og::RRT>();
                 break;
-            case RRT_I:
-                p = createPlannerRange<og::RRT>(true);
-                break;
             case RRTConnect:
                 p = createPlannerRange<og::RRTConnect>();
                 break;
-            case RRTConnect_I:
-                p = createPlannerRange<og::RRTConnect>(true);
-                break;
-            case RRTstar:
-                p = createPlannerRange<og::RRTstar>();
-                break;
-            case EST:
-                p = createPlannerRange<og::EST>();
-                break;
-            case BiEST:
-                p = createPlannerRange<og::BiEST>();
-                break;
-            case ProjEST:
-                p = createPlannerRangeProj<og::ProjEST>(projection);
-                break;
-            case BITstar:
-                p = createPlanner<og::BITstar>();
-                break;
+           
             case PRM:
                 p = createPlanner<og::PRM>();
                 break;
-            case SPARS:
-                p = createPlanner<og::SPARS>();
+
+            case No_RRT:
+                p = createPlanner<og::No_RRT>();
                 break;
+
             case KPIECE:
                 p = createPlannerRangeProj<og::KPIECE1>(projection);
-                break;
-            case BKPIECE:
-                p = createPlannerRangeProj<og::BKPIECE1>(projection);
                 break;
         }
         return p;
@@ -429,27 +334,26 @@ public:
     {
         ss->setup();
         ob::PlannerStatus stat = ss->solve(c_opt.time); 
-        std::cout << std::endl;
-
         if (stat)
         {
             ompl::geometric::PathGeometric path = ss->getSolutionPath();
-            if (!path.check())
-                OMPL_WARN("Path fails check!");
+            // if (!path.check())
+            //     OMPL_WARN("Path fails check!");
 
             if (stat == ob::PlannerStatus::APPROXIMATE_SOLUTION)
                 OMPL_WARN("Solution is approximate.");
-            OMPL_INFORM("Interpolating path ... ");
+            // OMPL_INFORM("Interpolating path ... ");
             path.interpolate();
 
             if (output)
             {                
                 // std::ofstream pathfile((boost::format("%1%_path.txt") % name).str()); //, std::ios::app);
                 std::ofstream pathfile("/home/jiyeong/catkin_ws/" + name + "_path.txt"); 
+                // std::ofstream pathfile("/home/jiyeong/catkin_ws/result_path.txt", std::ios::app); 
                 path.printAsMatrix(pathfile);
-                OMPL_INFORM("Dumping path to `%s_path.txt`.", name.c_str());
+                OMPL_INFORM("Interpolating path  &  Dumping path to `%s_path.txt`.", name.c_str());
                 pathfile.close();
-                
+                std::cout << std::endl;
             }
         }
         else
@@ -527,7 +431,8 @@ public:
     enum SPACE_TYPE type;
 
     ob::StateSpacePtr space;
-    ob::ConstraintPtr constraint;
+    // ob::ConstraintPtr constraint;
+    Constraint_newPtr constraint;
 
     ob::ConstrainedStateSpacePtr css;
     ob::ConstrainedSpaceInformationPtr csi;
@@ -543,4 +448,3 @@ public:
     ot::Benchmark::Request request;
 };
 
-#endif

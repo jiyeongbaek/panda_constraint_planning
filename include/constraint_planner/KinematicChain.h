@@ -112,16 +112,17 @@ public:
             bounds.setHigh(6 + i * 7, 2.8973);
         }
         setBounds(bounds);
-        std::cout << "  - min: ";
-        for (unsigned int i = 0; i < dimension_; ++i)
-            std::cout << bounds.low[i] << " ";
-        std::cout << std::endl;
-        std::cout << "  - max: ";
-        for (unsigned int i = 0; i < dimension_; ++i)
-            std::cout << bounds.high[i] << "  ";
-        std::cout << std::endl;
+        // std::cout << "  - min: ";
+        // for (unsigned int i = 0; i < dimension_; ++i)
+        //     std::cout << bounds.low[i] << " ";
+        // std::cout << std::endl;
+        // std::cout << "  - max: ";
+        // for (unsigned int i = 0; i < dimension_; ++i)
+        //     std::cout << bounds.high[i] << "  ";
+        // std::cout << std::endl;
         
-        type_ = ompl::base::STATE_SPACE_SO2;
+        // type_ = ompl::base::STATE_SPACE_SO2;
+        type_ = ompl::base::STATE_SPACE_REAL_VECTOR;
     }
 
     // void registerProjections() override
@@ -476,8 +477,8 @@ public:
     bool isValid(const ompl::base::State *state) const override
     {
         const KinematicChainSpace *space = si_->getStateSpace()->as<KinematicChainSpace>();
-        // const auto *s = state->as<KinematicChainSpace::StateType>();
-        const auto *s = state->as<ob::RealVectorStateSpace::StateType>();
+        const auto *s = state->as<KinematicChainSpace::StateType>();
+        // const auto *s = state->as<ompl::base::RealVectorStateSpace::StateType>();
         
         return isValidImpl(space, s);
     }
