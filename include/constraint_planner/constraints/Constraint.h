@@ -16,6 +16,18 @@ public:
     {
     }
 
+    // void function(const State *state, Eigen::Ref<Eigen::VectorXd> out) const override
+    // {
+    //     function(*state->as<ConstrainedStateSpace::StateType>(), out);
+    // }
+
+    // void jacobian(const State *state, Eigen::Ref<Eigen::MatrixXd> out) const override
+    // {
+    //     jacobian(*state->as<ConstrainedStateSpace::StateType>(), out);
+    // }
+
+
+
     bool project(Eigen::Ref<Eigen::VectorXd> x) const override
     {
         // Newton's method

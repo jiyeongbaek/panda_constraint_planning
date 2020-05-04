@@ -1,41 +1,4 @@
-/*********************************************************************
- * Software License Agreement (BSD License)
- *
- *  Copyright (c) 2013, Rice University
- *  All rights reserved.
- *
- *  Redistribution and use in source and binary forms, with or without
- *  modification, are permitted provided that the following conditions
- *  are met:
- *
- *   * Redistributions of source code must retain the above copyright
- *     notice, this list of conditions and the following disclaimer.
- *   * Redistributions in binary form must reproduce the above
- *     copyright notice, this list of conditions and the following
- *     disclaimer in the documentation and/or other materials provided
- *     with the distribution.
- *   * Neither the name of the Rice University nor the names of its
- *     contributors may be used to endorse or promote products derived
- *     from this software without specific prior written permission.
- *
- *  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- *  "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- *  LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
- *  FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
- *  COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
- *  INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
- *  BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
- *  LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
- *  CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- *  LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
- *  ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- *  POSSIBILITY OF SUCH DAMAGE.
- *********************************************************************/
-
-/* Author: Bryant Gipson, Mark Moll */
-
-#ifndef OMPL_DEMO_KINEMATIC_CHAIN_
-#define OMPL_DEMO_KINEMATIC_CHAIN_
+#pragma once
 
 #include <ompl/base/spaces/RealVectorStateSpace.h>
 #include <ompl/geometric/planners/rrt/RRT.h>
@@ -52,6 +15,12 @@
 #include <Eigen/Geometry>
 #include <Eigen/Dense>
 #include <chrono>
+
+// MoveIt!
+#include <moveit/robot_model_loader/robot_model_loader.h>
+#include <moveit/planning_scene/planning_scene.h>
+#include <moveit/kinematic_constraints/utils.h>
+
 using namespace Eigen;
 // simply use a random projection
 class KinematicChainProjector : public ompl::base::ProjectionEvaluator
@@ -121,8 +90,8 @@ public:
         //     std::cout << bounds.high[i] << "  ";
         // std::cout << std::endl;
         
-        // type_ = ompl::base::STATE_SPACE_SO2;
-        type_ = ompl::base::STATE_SPACE_REAL_VECTOR;
+        type_ = ompl::base::STATE_SPACE_SO2;
+        // type_ = ompl::base::STATE_SPACE_REAL_VECTOR;
     }
 
     // void registerProjections() override
@@ -131,68 +100,63 @@ public:
     // }
 
 
-    void enforceBounds(ompl::base::State *state) const override
-    {
-        auto *statet = state->as<StateType>();
-        for (int i = 0; i < 2; i++)
-        {
-            double v0 = fmod(statet->values[0 + i*7], 2.0 * 2.8973);
-            double v1 = fmod(statet->values[1 + i*7], 2.0 * 1.7628);
-            double v2 = fmod(statet->values[2 + i*7], 2.0 * 2.8973);
-            double v3 = fmod(statet->values[3 + i*7], -0.0698 -3.0718);
-            double v4 = fmod(statet->values[4 + i*7], 2.0 * 2.8973);
-            double v5 = fmod(statet->values[5 + i*7], 3.7525-0.0175);
-            double v6 = fmod(statet->values[6 + i*7], 2.0 * 2.8973);
-
-            if (v0 < -2.8973)
-                v0 += 2.0 * 2.8973;
-            else if (v0 > 2.8973)
-                v0 -= 2.0 * 2.8973;
-            statet->values[0 + i*7] = v0;
-            
-            if (v1 < -1.7628)
-                v1 += 2.0 * 1.7628;
-            else if (v1 > 1.7628)
-                v1 -= 2.0 * 1.7628;    
-            statet->values[1 + i*7] = v1;
-
-            if (v2 < -2.8973)
-                v2 += 2.0 * 2.8973;
-            else if (v2 > 2.8973)
-                v2 -= 2.0 * 2.8973;
-            statet->values[2 + i*7] = v2;
-
-            if (v3 < -3.0718)
-                v3 += -0.0698 -3.0718;
-            if (v3 > -0.0698)
-                v3 -= -0.0698 -3.0718;
-            statet->values[3 + i*7] = v3;
-
-            if (v4 < -2.8973)
-                v4 += 2.0 * 2.8973;
-            else if (v4 > -2.8973)
-                v4 -= 2.0 * 2.8973;    
-            statet->values[4 + i*7] = v4;
-
-            if (v5 < -0.0175)
-                v5 += 3.7525-0.0175;
-            else if (v5 > 3.7525)
-                v5 -= 3.7525-0.0175;
-            statet->values[5 + i*7] = v5;
-
-            if (v6 < -2.8973)
-                v6 += 2.0 * 2.8973;
-            if (v6 > -2.8973)
-                v6 -= 2.0 * 2.8973;
-            statet->values[6 + i*7] = v6;
-        }
-    }
-
-    // double distance(const ompl::base::State *state1, const ompl::base::State *state2) const override
+    // void enforceBounds(ompl::base::State *state) const override
     // {
-    //     const auto *cstate1 = state1->as<StateType>();
-    //     const auto *cstate2 = state2->as<StateType>();
+    //     auto *statet = state->as<StateType>();
+    //     for (int i = 0; i < 2; i++)
+    //     {
+    //         double v0 = fmod(statet->values[0 + i*7], 2.0 * 2.8973);
+    //         double v1 = fmod(statet->values[1 + i*7], 2.0 * 1.7628);
+    //         double v2 = fmod(statet->values[2 + i*7], 2.0 * 2.8973);
+    //         double v3 = fmod(statet->values[3 + i*7], -0.0698 -3.0718);
+    //         double v4 = fmod(statet->values[4 + i*7], 2.0 * 2.8973);
+    //         double v5 = fmod(statet->values[5 + i*7], 3.7525-0.0175);
+    //         double v6 = fmod(statet->values[6 + i*7], 2.0 * 2.8973);
+
+    //         if (v0 < -2.8973)
+    //             v0 += 2.0 * 2.8973;
+    //         else if (v0 > 2.8973)
+    //             v0 -= 2.0 * 2.8973;
+    //         statet->values[0 + i*7] = v0;
+            
+    //         if (v1 < -1.7628)
+    //             v1 += 2.0 * 1.7628;
+    //         else if (v1 > 1.7628)
+    //             v1 -= 2.0 * 1.7628;    
+    //         statet->values[1 + i*7] = v1;
+
+    //         if (v2 < -2.8973)
+    //             v2 += 2.0 * 2.8973;
+    //         else if (v2 > 2.8973)
+    //             v2 -= 2.0 * 2.8973;
+    //         statet->values[2 + i*7] = v2;
+
+    //         if (v3 < -3.0718)
+    //             v3 += -0.0698 -3.0718;
+    //         if (v3 > -0.0698)
+    //             v3 -= -0.0698 -3.0718;
+    //         statet->values[3 + i*7] = v3;
+
+    //         if (v4 < -2.8973)
+    //             v4 += 2.0 * 2.8973;
+    //         else if (v4 > -2.8973)
+    //             v4 -= 2.0 * 2.8973;    
+    //         statet->values[4 + i*7] = v4;
+
+    //         if (v5 < -0.0175)
+    //             v5 += 3.7525-0.0175;
+    //         else if (v5 > 3.7525)
+    //             v5 -= 3.7525-0.0175;
+    //         statet->values[5 + i*7] = v5;
+
+    //         if (v6 < -2.8973)
+    //             v6 += 2.0 * 2.8973;
+    //         if (v6 > -2.8973)
+    //             v6 -= 2.0 * 2.8973;
+    //         statet->values[6 + i*7] = v6;
+    //     }
     // }
+
     bool equalStates(const ompl::base::State *state1, const ompl::base::State *state2) const override
     {
 
@@ -201,42 +165,12 @@ public:
         for (unsigned int i = 0; i < dimension_; ++i)
         {
             double diff = (*s1++) - (*s2++);
-            if (fabs(diff) > 1e-10)
+            if (fabs(diff) > 1e-10) // 10
                 return false;
         }
         return true;
     }
 
-    /* 	Computes the state that lies at time t in [0, 1] on the segment that connects from state to to state. 
-    The memory location of state is not required to be different from the memory of either from or to. */
-
-    // void interpolate(const ompl::base::State *from, const ompl::base::State *to, const double t,
-    //                  ompl::base::State *state) const override
-    // {
-    //     const auto *fromt = from->as<StateType>();
-    //     const auto *tot = to->as<StateType>();
-    //     auto *statet = state->as<StateType>();
-
-    //     for (unsigned int i = 0; i < dimension_; ++i)
-    //     {
-    //         double diff = tot->values[i] - fromt->values[i];
-    //         if (fabs(diff) <= boost::math::constants::pi<double>())
-    //             statet->values[i] = fromt->values[i] + diff * t;
-    //         else
-    //         {
-    //             if (diff > 0.0)
-    //                 diff = 2.0 * boost::math::constants::pi<double>() - diff;
-    //             else
-    //                 diff = -2.0 * boost::math::constants::pi<double>() - diff;
-
-    //             statet->values[i] = fromt->values[i] - diff * t;
-    //             if (statet->values[i] > boost::math::constants::pi<double>())
-    //                 statet->values[i] -= 2.0 * boost::math::constants::pi<double>();
-    //             else if (statet->values[i] < -boost::math::constants::pi<double>())
-    //                 statet->values[i] += 2.0 * boost::math::constants::pi<double>();
-    //         }
-    //     }
-    // }
 
 protected:
    
@@ -247,12 +181,7 @@ protected:
 #include <moveit/robot_state/robot_state.h>
 #include <moveit/utils/robot_model_test_utils.h>
 
-#include <moveit/collision_detection_fcl/collision_common.h>
-#include <moveit/collision_detection_fcl/collision_world_fcl.h>
-#include <moveit/collision_detection_fcl/collision_robot_fcl.h>
-
 #include <urdf_parser/urdf_parser.h>
-#include <geometric_shapes/shape_operations.h>
 
 #include <sstream>
 #include <algorithm>
@@ -263,279 +192,111 @@ protected:
 #include <moveit/planning_scene_interface/planning_scene_interface.h>
 #include <geometric_shapes/shape_operations.h>
 
-typedef collision_detection::CollisionWorldFCL DefaultCWorldType;
-typedef collision_detection::CollisionRobotFCL DefaultCRobotType;
 const std::string panda_joint_names[14] = {"panda_left_joint1", "panda_left_joint2", "panda_left_joint3", "panda_left_joint4", "panda_left_joint5", "panda_left_joint6", "panda_left_joint7",
                             "panda_right_joint1", "panda_right_joint2", "panda_right_joint3", "panda_right_joint4", "panda_right_joint5", "panda_right_joint6", "panda_right_joint7"};
-/** \brief Brings the panda robot in user defined home position */
-inline void setToHome(robot_state::RobotState& panda_state)
-{
-  panda_state.setToDefaultValues();
-  double joint2 = -0.785;
-  double joint4 = -2.356;
-  double joint6 = 1.571;
-  double joint7 = 0.785;
-  panda_state.setJointPositions("panda_left_joint2", &joint2);
-  panda_state.setJointPositions("panda_right_joint2", &joint2);
-  panda_state.setJointPositions("panda_left_joint4", &joint4);
-  panda_state.setJointPositions("panda_right_joint4", &joint4);
-  panda_state.setJointPositions("panda_left_joint6", &joint6);
-  panda_state.setJointPositions("panda_right_joint6", &joint6);
-  panda_state.setJointPositions("panda_left_joint7", &joint7);
-  panda_state.setJointPositions("panda_right_joint7", &joint7);
-  panda_state.update();
-}
 
 class PandaCollisionCheck
 {
 public:
   PandaCollisionCheck()
   {
-    robot_model_ = moveit::core::loadTestingRobotModel("dual_panda");
-    robot_model_ok_ = static_cast<bool>(robot_model_);
-    acm_.reset(new collision_detection::AllowedCollisionMatrix(robot_model_->getLinkModelNames(), false));
+    robot_model_loader::RobotModelLoader robot_model_loader("robot_description");
+    kinematic_model = robot_model_loader.getModel();
+    planning_scene = std::make_shared<planning_scene::PlanningScene> (kinematic_model);
+    acm_ = std::make_shared<collision_detection::AllowedCollisionMatrix> (planning_scene->getAllowedCollisionMatrix());
 
-    acm_->setEntry("base", "panda_left_link0", true);
-    acm_->setEntry("base", "panda_left_link1", true);
-    acm_->setEntry("base", "panda_left_link2", true);
-    acm_->setEntry("base", "panda_left_link3", true);
-    acm_->setEntry("base", "panda_left_link4", true);
+    moveit_msgs::AttachedCollisionObject stefan_obj;
+    stefan_obj.link_name = "panda_left_hand";
+    stefan_obj.object.header.frame_id = "panda_left_hand";
+    stefan_obj.object.id = "stefan"; /* The id of the object is used to identify it. */
+    
+    shapes::Mesh* m = shapes::createMeshFromResource("file:///home/jiyeong/catkin_ws/src/1_assembly/grasping_point/STEFAN/stl/assembly.stl");
+    shape_msgs::Mesh stefan_mesh;
+    shapes::ShapeMsg stefan_mesh_msg;
+    shapes::constructMsgFromShape(m, stefan_mesh_msg);
+    stefan_mesh = boost::get<shape_msgs::Mesh>(stefan_mesh_msg);
+    
+    // 파지점 
+    Vector3d z_offset(0, 0, -0.109);
+    Eigen::Affine3d obj_Lgrasp, Lgrasp_obj;
+    obj_Lgrasp.linear() = Quaterniond(0.48089 , 0.518406, -0.518406, 0.48089).toRotationMatrix();
+    obj_Lgrasp.translation() = Vector3d(-0.417291983962059, 0.385170965965183, 0.189059236695616) + obj_Lgrasp.linear() * z_offset;
+    Lgrasp_obj = obj_Lgrasp.inverse();
+    Quaterniond orientation(Lgrasp_obj.linear());
 
-    acm_->setEntry("base", "panda_right_link0", true);
-    acm_->setEntry("base", "panda_right_link1", true);
-    acm_->setEntry("base", "panda_right_link2", true);
-    acm_->setEntry("base", "panda_right_link3", true);
-    acm_->setEntry("base", "panda_right_link4", true);
+    geometry_msgs::Pose stefan_pose;
+    stefan_pose.orientation.w = orientation.w();
+    stefan_pose.orientation.x = orientation.x();
+    stefan_pose.orientation.y = orientation.y();
+    stefan_pose.orientation.z = orientation.z();
+    stefan_pose.position.x = Lgrasp_obj.translation()[0];
+    stefan_pose.position.y = Lgrasp_obj.translation()[1];
+    stefan_pose.position.z = Lgrasp_obj.translation()[2];
+    
+    stefan_obj.object.meshes.push_back(stefan_mesh);
+    stefan_obj.object.mesh_poses.push_back(stefan_pose);
+    stefan_obj.object.operation = stefan_obj.object.ADD;
 
-    acm_->setEntry("panda_left_hand" ,"panda_left_leftfinger" , true);
-    acm_->setEntry("panda_left_hand" ,"panda_left_link3" , true);
-    acm_->setEntry("panda_left_hand" ,"panda_left_link4" , true);
-    acm_->setEntry("panda_left_hand" ,"panda_left_link5" , true);
-    acm_->setEntry("panda_left_hand" ,"panda_left_link6" , true);
-    acm_->setEntry("panda_left_hand" ,"panda_left_link7" , true);
-    acm_->setEntry("panda_left_hand" ,"panda_left_rightfinger" , true);
-    acm_->setEntry("panda_left_hand" ,"panda_right_link0" , true);
-    acm_->setEntry("panda_left_leftfinger" ,"panda_left_link3" , true);
-    acm_->setEntry("panda_left_leftfinger" ,"panda_left_link4" , true);
-    acm_->setEntry("panda_left_leftfinger" ,"panda_left_link6" , true);
-    acm_->setEntry("panda_left_leftfinger" ,"panda_left_link7" , true);
-    acm_->setEntry("panda_left_leftfinger" ,"panda_left_rightfinger" , true);
-    acm_->setEntry("panda_left_leftfinger" ,"panda_right_link0" , true);
-    acm_->setEntry("panda_left_link0" ,"panda_left_link1" , true);
-    acm_->setEntry("panda_left_link0" ,"panda_left_link2" , true);
-    acm_->setEntry("panda_left_link0" ,"panda_left_link3" , true);
-    acm_->setEntry("panda_left_link0" ,"panda_left_link4" , true);
-    acm_->setEntry("panda_left_link0" ,"panda_right_hand" , true);
-    acm_->setEntry("panda_left_link0" ,"panda_right_leftfinger" , true);
-    acm_->setEntry("panda_left_link0" ,"panda_right_link0" , true);
-    acm_->setEntry("panda_left_link0" ,"panda_right_link1" , true);
-    acm_->setEntry("panda_left_link0" ,"panda_right_link2" , true);
-    acm_->setEntry("panda_left_link0" ,"panda_right_link3" , true);
-    acm_->setEntry("panda_left_link0" ,"panda_right_link4" , true);
-    acm_->setEntry("panda_left_link0" ,"panda_right_link5" , true);
-    acm_->setEntry("panda_left_link0" ,"panda_right_link6" , true);
-    acm_->setEntry("panda_left_link0" ,"panda_right_link7" , true);
-    acm_->setEntry("panda_left_link1" ,"panda_left_link2" , true);
-    acm_->setEntry("panda_left_link1" ,"panda_left_link3" , true);
-    acm_->setEntry("panda_left_link1" ,"panda_left_link4" , true);
-    acm_->setEntry("panda_left_link1" ,"panda_right_link0" , true);
-    acm_->setEntry("panda_left_link1" ,"panda_right_link1" , true);
-    acm_->setEntry("panda_left_link1" ,"panda_right_link2" , true);
-    acm_->setEntry("panda_left_link1" ,"panda_right_link3" , true);
-    acm_->setEntry("panda_left_link1" ,"panda_right_link4" , true);
-    acm_->setEntry("panda_left_link1" ,"panda_right_link5" , true);
-    acm_->setEntry("panda_left_link1" ,"panda_right_link6" , true);
-    acm_->setEntry("panda_left_link1" ,"panda_right_link7" , true);
-    acm_->setEntry("panda_left_link2" ,"panda_left_link3" , true);
-    acm_->setEntry("panda_left_link2" ,"panda_left_link4" , true);
-    acm_->setEntry("panda_left_link2" ,"panda_right_link0" , true);
-    acm_->setEntry("panda_left_link2" ,"panda_right_link1" , true);
-    acm_->setEntry("panda_left_link2" ,"panda_right_link2" , true);
-    acm_->setEntry("panda_left_link2" ,"panda_right_link3" , true);
-    acm_->setEntry("panda_left_link2" ,"panda_right_link4" , true);
-    acm_->setEntry("panda_left_link2" ,"panda_right_link5" , true);
-    acm_->setEntry("panda_left_link3" ,"panda_left_link4" , true);
-    acm_->setEntry("panda_left_link3" ,"panda_left_link5" , true);
-    acm_->setEntry("panda_left_link3" ,"panda_left_link6" , true);
-    acm_->setEntry("panda_left_link3" ,"panda_left_link7" , true);
-    acm_->setEntry("panda_left_link3" ,"panda_left_rightfinger" , true);
-    acm_->setEntry("panda_left_link3" ,"panda_right_link0" , true);
-    acm_->setEntry("panda_left_link3" ,"panda_right_link1" , true);
-    acm_->setEntry("panda_left_link3" ,"panda_right_link2" , true);
-    acm_->setEntry("panda_left_link3" ,"panda_right_link3" , true);
-    acm_->setEntry("panda_left_link3" ,"panda_right_link4" , true);
-    acm_->setEntry("panda_left_link4" ,"panda_left_link5" , true);
-    acm_->setEntry("panda_left_link4" ,"panda_left_link6" , true);
-    acm_->setEntry("panda_left_link4" ,"panda_left_link7" , true);
-    acm_->setEntry("panda_left_link4" ,"panda_left_rightfinger" , true);
-    acm_->setEntry("panda_left_link4" ,"panda_right_link0" , true);
-    acm_->setEntry("panda_left_link4" ,"panda_right_link1" , true);
-    acm_->setEntry("panda_left_link4" ,"panda_right_link2" , true);
-    acm_->setEntry("panda_left_link4" ,"panda_right_link3" , true);
-    acm_->setEntry("panda_left_link4" ,"panda_right_link4" , true);
-    acm_->setEntry("panda_left_link5" ,"panda_left_link6" , true);
-    acm_->setEntry("panda_left_link5" ,"panda_left_link7" , true);
-    acm_->setEntry("panda_left_link5" ,"panda_right_link0" , true);
-    acm_->setEntry("panda_left_link5" ,"panda_right_link1" , true);
-    acm_->setEntry("panda_left_link5" ,"panda_right_link2" , true);
-    acm_->setEntry("panda_left_link6" ,"panda_left_link7" , true);
-    acm_->setEntry("panda_left_link6" ,"panda_left_rightfinger" , true);
-    acm_->setEntry("panda_left_link6" ,"panda_right_link0" , true);
-    acm_->setEntry("panda_left_link6" ,"panda_right_link1" , true);
-    acm_->setEntry("panda_left_link7" ,"panda_left_rightfinger" , true);
-    acm_->setEntry("panda_left_link7" ,"panda_right_link0" , true);
-    acm_->setEntry("panda_left_link7" ,"panda_right_link1" , true);
-    acm_->setEntry("panda_left_rightfinger" ,"panda_right_link0" , true);
-    acm_->setEntry("panda_left_rightfinger" ,"panda_right_rightfinger" , true);
-    acm_->setEntry("panda_right_hand" ,"panda_right_leftfinger" , true);
-    acm_->setEntry("panda_right_hand" ,"panda_right_link3" , true);
-    acm_->setEntry("panda_right_hand" ,"panda_right_link4" , true);
-    acm_->setEntry("panda_right_hand" ,"panda_right_link5" , true);
-    acm_->setEntry("panda_right_hand" ,"panda_right_link6" , true);
-    acm_->setEntry("panda_right_hand" ,"panda_right_link7" , true);
-    acm_->setEntry("panda_right_hand" ,"panda_right_rightfinger" , true);
-    acm_->setEntry("panda_right_leftfinger" ,"panda_right_link3" , true);
-    acm_->setEntry("panda_right_leftfinger" ,"panda_right_link4" , true);
-    acm_->setEntry("panda_right_leftfinger" ,"panda_right_link6" , true);
-    acm_->setEntry("panda_right_leftfinger" ,"panda_right_link7" , true);
-    acm_->setEntry("panda_right_leftfinger" ,"panda_right_rightfinger" , true);
-    acm_->setEntry("panda_right_link0" ,"panda_right_link1" , true);
-    acm_->setEntry("panda_right_link0" ,"panda_right_link2" , true);
-    acm_->setEntry("panda_right_link0" ,"panda_right_link3" , true);
-    acm_->setEntry("panda_right_link0" ,"panda_right_link4" , true);
-    acm_->setEntry("panda_right_link1" ,"panda_right_link2" , true);
-    acm_->setEntry("panda_right_link1" ,"panda_right_link3" , true);
-    acm_->setEntry("panda_right_link1" ,"panda_right_link4" , true);
-    acm_->setEntry("panda_right_link2" ,"panda_right_link3" , true);
-    acm_->setEntry("panda_right_link2" ,"panda_right_link4" , true);
-    acm_->setEntry("panda_right_link3" ,"panda_right_link4" , true);
-    acm_->setEntry("panda_right_link3" ,"panda_right_link5" , true);
-    acm_->setEntry("panda_right_link3" ,"panda_right_link6" , true);
-    acm_->setEntry("panda_right_link3" ,"panda_right_link7" , true);
-    acm_->setEntry("panda_right_link3" ,"panda_right_rightfinger" , true);
-    acm_->setEntry("panda_right_link4" ,"panda_right_link5" , true);
-    acm_->setEntry("panda_right_link4" ,"panda_right_link6" , true);
-    acm_->setEntry("panda_right_link4" ,"panda_right_link7" , true);
-    acm_->setEntry("panda_right_link4" ,"panda_right_rightfinger" , true);
-    acm_->setEntry("panda_right_link5" ,"panda_right_link6" , true);
-    acm_->setEntry("panda_right_link5" ,"panda_right_link7" , true);
-    acm_->setEntry("panda_right_link6" ,"panda_right_link7" , true);
-    acm_->setEntry("panda_right_link6" ,"panda_right_rightfinger" , true);
-    acm_->setEntry("panda_right_link7" ,"panda_right_rightfinger" , true);
-
-    crobot_.reset(new DefaultCRobotType(robot_model_));
-    cworld_.reset(new DefaultCWorldType());
-    robot_state_.reset(new robot_state::RobotState(robot_model_));
-    setToHome(*robot_state_);
-
-    base_.reset(new DefaultCWorldType());
-
-    shapes::Shape* box = new shapes::Box(2.4, 1.2, 0.6);
-    shapes::ShapeConstPtr box_ptr(box);
-    Eigen::Isometry3d box_pos{Eigen::Isometry3d::Identity()};
-    box_pos.translation().x() = 1.0;
-    box_pos.translation().y() = 0.0;
-    box_pos.translation().z() = 0.10; // bos : 0.6, z : 0.23 됨!
-    base_->getWorld()->addToObject("box", box_ptr, box_pos);
-
+    // moveit_scene = planning_scene->getPlanningSceneMsg();
+    moveit_scene.robot_state.attached_collision_objects.push_back(stefan_obj);
+    moveit_scene.is_diff = true;
   }
 
 public:
   bool robot_model_ok_;
-
-  robot_model::RobotModelPtr robot_model_;
-  collision_detection::CollisionRobotPtr crobot_;
-  collision_detection::CollisionWorldPtr cworld_;
-  collision_detection::CollisionWorldPtr base_;
-  collision_detection::AllowedCollisionMatrixPtr acm_;
-
-  robot_state::RobotStatePtr robot_state_;
-
+  robot_model_loader::RobotModelLoader robot_model_loader;    
+  robot_model::RobotModelPtr kinematic_model;
+    std::shared_ptr<planning_scene::PlanningScene> planning_scene;
+    collision_detection::AllowedCollisionMatrixPtr acm_;
+    moveit_msgs::PlanningScene moveit_scene;
 };
 
 class KinematicChainValidityChecker : public ompl::base::StateValidityChecker // to find valid state space configurations
 {
 public:
     PandaCollisionCheck collision_checker;
-    shapes::ShapeConstPtr shape_ptr;
-    Affine3d obj_Lgrasp, Lgrasp_obj;
-    KinematicChainValidityChecker(const ompl::base::SpaceInformationPtr &si) : ompl::base::StateValidityChecker(si)
-    {
-        shapes::Mesh* stefan = shapes::createMeshFromResource("file:///home/jiyeong/catkin_ws/src/1_assembly/grasping_point/STEFAN/stl/assembly_fcl2.stl");
-        shape_ptr = shapes::ShapeConstPtr(stefan);
-
-        Vector3d z_offset(0, 0, -0.109);
-
-        Quaterniond q_Lgrasp(0.48089 , 0.518406, -0.518406, 0.48089);
-        obj_Lgrasp.linear() = Quaterniond(0.48089 , 0.518406, -0.518406, 0.48089).toRotationMatrix();
-        obj_Lgrasp.translation() = Vector3d(-0.417291983962059, 0.385170965965183, 0.189059236695616) + obj_Lgrasp.linear() * z_offset;
-
-        Lgrasp_obj = obj_Lgrasp.inverse();
-
-    }
-
+    KinematicChainValidityChecker(const ompl::base::SpaceInformationPtr &si) : ompl::base::StateValidityChecker(si){    }
     bool isValid(const ompl::base::State *state) const override
     {
         const KinematicChainSpace *space = si_->getStateSpace()->as<KinematicChainSpace>();
         const auto *s = state->as<KinematicChainSpace::StateType>();
-        // const auto *s = state->as<ompl::base::RealVectorStateSpace::StateType>();
         
-        return isValidImpl(space, s);
-    }
+        collision_detection::CollisionRequest req;
+        collision_detection::CollisionResult res;
+        // req.contacts = true;
+        // req.max_contacts = 1000;
 
-protected:
-    bool isValidImpl(const KinematicChainSpace *space, const KinematicChainSpace::StateType *s) const
-    {
-        robot_state::RobotState state1(collision_checker.robot_model_);
+        robot_state::RobotState robot_state = collision_checker.planning_scene->getCurrentState();
+        // or robot_state::RobotState robot_state(collision_checker.kinematic_model);
         for (int i = 0; i < 14; i++)
-            state1.setJointPositions(panda_joint_names[i], &s->values[i]);
-        state1.update();
+            robot_state.setJointPositions(panda_joint_names[i], &s->values[i]);
+        robot_state.update();
+        collision_checker.planning_scene->setCurrentState(robot_state);
 
-        return !ObjectWorldCollision(&state1) && !selfCollisionCheck(&state1);
-    }
-
-    bool selfCollisionCheck(const robot_state::RobotState *state) const
-    {   
-        collision_detection::CollisionRequest req;
-        collision_detection::CollisionResult res;
-        collision_checker.crobot_->checkSelfCollision(req, res, *state, *collision_checker.acm_);
-        
-        /* COLLISION : TRUE, SAFE : FALSE*/
-        return res.collision;
-    }
-
-    bool ObjectWorldCollision(const robot_state::RobotState *state) const
-    {   
-        // std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
-        collision_detection::CollisionRequest req;
-        collision_detection::CollisionResult res;
-        req.max_contacts = 10;
-        req.contacts = true;
-        req.verbose = false;
-
-        Eigen::Affine3d base_Lgrasp, object_pos;
-        base_Lgrasp = state->getFrameTransform("panda_left_hand"); // base to panda_left_hand
-        object_pos = base_Lgrasp * Lgrasp_obj;
-        Eigen::Isometry3d pos1;
-        pos1.translation().x() = object_pos.translation()[0];
-        pos1.translation().y() = object_pos.translation()[1];
-        pos1.translation().z() = object_pos.translation()[2];
-        pos1.linear() = object_pos.linear();
-    
-        // collision_checker.acm_->setEntry("panda_right_rightfinger", "stefan", true);
-        // collision_checker.acm_->setEntry("panda_right_leftfinger", "stefan", true);
-        // collision_checker.acm_->setEntry("panda_left_rightfinger", "stefan", true);
-        // collision_checker.acm_->setEntry("panda_left_leftfinger", "stefan", true);
-        collision_checker.cworld_->getWorld()->addToObject("stefan", shape_ptr, pos1);
-        collision_checker.cworld_->checkWorldCollision(req, res, *collision_checker.base_);
-        
-        // std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
-        // std::cout << std::chrono::duration_cast<std::chrono::seconds>(end - begin).count() << " s" << std::endl;
-
-        /* COLLISION : TRUE, SAFE : FALSE*/
-        return res.collision;
+        collision_checker.acm_->setEntry("panda_right_rightfinger", "stefan", true);
+        collision_checker.acm_->setEntry("panda_right_leftfinger", "stefan", true);
+        collision_checker.acm_->setEntry("panda_left_rightfinger", "stefan", true);
+        collision_checker.acm_->setEntry("panda_left_leftfinger", "stefan", true);
+        collision_checker.planning_scene->setPlanningSceneMsg(collision_checker.moveit_scene);
+        // collision_checker.planning_scene->checkCollision(req, res, robot_state, *collision_checker.acm_);
+        collision_checker.planning_scene->checkCollision(req, res);
+        return !res.collision;
     }
 };
 
-
-#endif
+// class ConstrainedKinematicChainValidityChecker : public KinematicChainValidityChecker
+// {
+// public:
+//     ConstrainedKinematicChainValidityChecker(const ob::jy_ConstrainedSpaceInformationPtr &si)
+//         : KinematicChainValidityChecker(si)
+//     {
+//     }
+//     bool isValid(const ob::State *state) const override
+//     {
+//         auto &&space = si_->getStateSpace()->as<ob::ConstrainedStateSpace>()->getSpace()->as<KinematicChainSpace>();
+//         auto &&s = state->as<ob::ConstrainedStateSpace::StateType>()->getState()->as<KinematicChainSpace::StateType>();
+//         // if (isValidImpl(space, s))
+//         //     OMPL_INFORM("FOUND VALID STATE");
+//         return isValidImpl(space, s);
+//     }
+// };

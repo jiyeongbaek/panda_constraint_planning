@@ -1,0 +1,8 @@
+<launch>
+    <param name="robot_description" command="$(find xacro)/xacro --inorder '$(find social_env_description)/robots/social_env.urdf.xacro'" />
+    <include file="$(find social_moveit_config)/launch/planning_context.launch"/>
+    <node name="test" pkg="constraint_planner" type="test">
+        <rosparam command="load" file="$(find social_moveit_config)/config/kinematics.yaml"/>    
+    </node>
+</launch>
+

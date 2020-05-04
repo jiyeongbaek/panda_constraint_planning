@@ -4,30 +4,26 @@
 #include <fstream>
 
 #include <boost/format.hpp>
-#include <boost/program_options.hpp>
 
 #include <ompl/geometric/SimpleSetup.h>
 #include <ompl/geometric/PathGeometric.h>
 
-// #include <ompl/base/Constraint.h>
-#include <constraint_planner/Constraint.h>
-#include <ompl/base/ConstrainedSpaceInformation.h>
+#include <constraint_planner/constraints/ConstraintFunction.h>
+#include <constraint_planner/base/jy_ConstrainedSpaceInformation.h>
+
 #include <ompl/base/spaces/constraint/ConstrainedStateSpace.h>
 #include <ompl/base/spaces/constraint/AtlasStateSpace.h>
 #include <ompl/base/spaces/constraint/TangentBundleStateSpace.h>
-#include <ompl/base/spaces/constraint/ProjectedStateSpace.h>
+// #include <ompl/base/spaces/constraint/ProjectedStateSpace.h>
+#include <constraint_planner/base/jy_ProjectedStateSpace.h>
 
 #include <ompl/geometric/planners/rrt/RRT.h>
 #include <ompl/geometric/planners/rrt/RRTConnect.h>
-#include <ompl/geometric/planners/rrt/RRTstar.h>
 #include <ompl/geometric/planners/prm/PRM.h>
-#include <constraint_planner/No_RRT.h>
-#include <ompl/geometric/planners/kpiece/KPIECE1.h>
-
-#include <ompl/geometric/planners/rrt/BiTRRT.h>
+#include <constraint_planner/planner/No_RRT.h>
+#include <constraint_planner/planner/newPRM.h>
 #include <ompl/tools/benchmark/Benchmark.h>
 
-namespace po = boost::program_options;
 namespace ob = ompl::base;
 namespace og = ompl::geometric;
 namespace om = ompl::magic;
@@ -67,7 +63,7 @@ enum PLANNER_TYPE
     RRTConnect,
     PRM,
     No_RRT,
-    KPIECE
+    newPRM
 };
 
 std::istream &operator>>(std::istream &in, enum PLANNER_TYPE &type)
@@ -82,10 +78,8 @@ std::istream &operator>>(std::istream &in, enum PLANNER_TYPE &type)
         type = PRM;
     else if (token == "No_RRT")
         type = No_RRT;
-
-    else if (token == "KPIECE")
-        type = KPIECE;
-
+    else if (token == "newPRM")
+        type = newPRM;
     else
         in.setstate(std::ios_base::failbit);
 
@@ -118,35 +112,33 @@ struct AtlasOptions
 class ConstrainedProblem
 {
 public:
-    ConstrainedProblem(enum SPACE_TYPE type, ob::StateSpacePtr space_, Constraint_newPtr constraint_)
+    ConstrainedProblem(enum SPACE_TYPE type, ob::StateSpacePtr space_, ChainConstraintPtr constraint_)
       : type(type), space(std::move(space_)), constraint(std::move(constraint_))
     {
-        // Combine the ambient state space and the constraint to create the
-        // constrained state space.
         switch (type)
         {
             case PJ:
                 OMPL_INFORM("Using Projection-Based State Space!");
-                css = std::make_shared<ob::ProjectedStateSpace>(space, constraint);
-                csi = std::make_shared<ob::ConstrainedSpaceInformation>(css);
+                css = std::make_shared<jy_ProjectedStateSpace>(space, constraint);
+                csi = std::make_shared<ob::jy_ConstrainedSpaceInformation>(css);
                 break;
             case PJ2:
                 OMPL_INFORM("Using Projection-Based (no random s) State Space!");
-                css = std::make_shared<ob::ProjectedStateSpace>(space, constraint);
-                csi = std::make_shared<ob::ConstrainedSpaceInformation>(css);
+                css = std::make_shared<jy_ProjectedStateSpace>(space, constraint);
+                csi = std::make_shared<ob::jy_ConstrainedSpaceInformation>(css);
                 break;
             case AT:
                 OMPL_INFORM("Using Atlas-Based State Space!");
                 css = std::make_shared<ob::AtlasStateSpace>(space, constraint);
-                csi = std::make_shared<ob::ConstrainedSpaceInformation>(css);
+                csi = std::make_shared<ob::jy_ConstrainedSpaceInformation>(css);
                 break;
             case TB:
                 OMPL_INFORM("Using Tangent Bundle-Based State Space!");
                 css = std::make_shared<ob::TangentBundleStateSpace>(space, constraint);
-                csi = std::make_shared<ob::TangentBundleSpaceInformation>(css);
+                csi = std::make_shared<ob::jy_TangentBundleSpaceInformation>(css);
                 break;
         }
-
+        
         css->setup();
         ss = std::make_shared<og::SimpleSetup>(csi);
     }
@@ -156,13 +148,14 @@ public:
     void setConstrainedOptions()
     {   
         // rrt 되는거
-        c_opt.delta =  0.075; //0.20
+        c_opt.delta =  0.10; //0.075
+
         c_opt.lambda = 2.0;
-        c_opt.tolerance1 = 0.001; //0.0025
-        c_opt.tolerance2 = 0.01;
-        c_opt.time = 30.;
-        c_opt.tries = 1000;
-        // c_opt.range = 6;
+        c_opt.tolerance1 = 0.005; //0.001
+        c_opt.tolerance2 = 0.05; // 0.01;
+        c_opt.time = 60.;
+        c_opt.tries = 200;
+        c_opt.range = 1.5;
 
         constraint->setTolerance(c_opt.tolerance1, c_opt.tolerance2);
         constraint->setMaxIterations(c_opt.tries);
@@ -173,18 +166,6 @@ public:
 
     void setAtlasOptions()
     {
-        /* 
-        static const unsigned int ATLAS_STATE_SPACE_SAMPLES = 50;
-        static const double ATLAS_STATE_SPACE_EPSILON = 0.05;
-        static const double ATLAS_STATE_SPACE_RHO_MULTIPLIER = 5;
-        static const double ATLAS_STATE_SPACE_ALPHA = boost::math::constants::pi<double>() / 8.0;
-        static const double ATLAS_STATE_SPACE_EXPLORATION = 0.75;
-        static const unsigned int ATLAS_STATE_SPACE_MAX_CHARTS_PER_EXTENSION = 200;
-        static const double ATLAS_STATE_SPACE_BACKOFF = 0.75;
-        */
-        //// Consider decreasing rho and/or the exploration paramter if this becomes a problem.
-        // OMPL_WARN("ompl::base::AtlasStateSpace::sampleUniform(): "
-        //           "Took too long; returning center of a random chart.");
         a_opt.epsilon = 0.1; //1.0
         a_opt.rho = 0.01; //::CONSTRAINED_STATE_SPACE_DELTA * om::ATLAS_STATE_SPACE_RHO_MULTIPLIER; //the maximum radius for which a chart is valid. Default 0.1.
         a_opt.exploration = 0.05; // om::ATLAS_STATE_SPACE_EXPLORATION;
@@ -236,6 +217,7 @@ public:
         }
 
         // Setup problem
+        // csi->ValidStateSamplerAllocator->setStartAndGoalStates(start, goal);
         ss->setStartAndGoalStates(sstart, sgoal);
     }
 
@@ -317,8 +299,8 @@ public:
                 p = createPlanner<og::No_RRT>();
                 break;
 
-            case KPIECE:
-                p = createPlannerRangeProj<og::KPIECE1>(projection);
+            case newPRM:
+                p = createPlanner<og::newPRM>();
                 break;
         }
         return p;
@@ -343,6 +325,7 @@ public:
             if (stat == ob::PlannerStatus::APPROXIMATE_SOLUTION)
                 OMPL_WARN("Solution is approximate.");
             // OMPL_INFORM("Interpolating path ... ");
+            path.printAsMatrix(std::cout);
             path.interpolate();
 
             if (output)
@@ -431,12 +414,11 @@ public:
     enum SPACE_TYPE type;
 
     ob::StateSpacePtr space;
-    // ob::ConstraintPtr constraint;
-    Constraint_newPtr constraint;
+    ChainConstraintPtr constraint;
 
     ob::ConstrainedStateSpacePtr css;
-    ob::ConstrainedSpaceInformationPtr csi;
 
+    ob::jy_ConstrainedSpaceInformationPtr csi;
     ob::PlannerPtr pp;
 
     og::SimpleSetupPtr ss;

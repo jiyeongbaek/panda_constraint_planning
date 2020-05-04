@@ -1,5 +1,5 @@
 
-#include <constraint_planner/NoRandomSampleSpace.h>
+#include <constraint_planner/planner/NoRandomSampleSpace.h>
 
 #include <Eigen/Core>
 #include <utility>

@@ -1,6 +1,6 @@
 
 
-#include <constraint_planner/No_RRT.h>
+#include <constraint_planner/planner/No_RRT.h>
 #include <limits>
 #include <ompl/base/goals/GoalSampleableRegion.h>
 #include <ompl/tools/config/SelfConfig.h>
@@ -36,7 +36,7 @@ void ompl::geometric::No_RRT::setup()
     Planner::setup();
     tools::SelfConfig sc(si_, getName());
     sc.configurePlannerRange(maxDistance_);
-
+    // maxDistance_ = 1.5;
     if (!nn_)
         nn_.reset(tools::SelfConfig::getDefaultNearestNeighbors<Motion *>(this));
     nn_->setDistanceFunction([this](const Motion *a, const Motion *b) { return distanceFunction(a, b); });
@@ -106,53 +106,40 @@ ompl::base::PlannerStatus ompl::geometric::No_RRT::solve(const base::PlannerTerm
     {  
         /* sample random state (with goal biasing) */
         if ((goal_s != nullptr) && rng_.uniform01() < goalBias_ && goal_s->canSample())
+        {
             goal_s->sampleGoal(rstate);
-        else if (rng_.uniform01() >= goalBias_ && rng_.uniform01() < 0.5)
-            sampler_->sampleUniformNear(rstate, mid, state_norm);
+        }
+        // else if (rng_.uniform01() >= goalBias_ && rng_.uniform01() < 0.60)
+        // {
+        //     sampler_->sampleUniformNear(rstate, mid, state_norm);
+        //     std::cout << "sample near" << std::endl;
+        // }
         else
             sampler_->sampleUniform(rstate);
 
         /* find closest state in the tree */
         Motion *nmotion = nn_->nearest(rmotion);
         base::State *dstate = rstate;
-
         /* find state to add */
         double d = si_->distance(nmotion->state, rstate);
         if (d > maxDistance_)
         {
+            // std::cout << "d : " << d << " maxDistance_ : " << maxDistance_ << " / " << maxDistance_ / d << std::endl;
             si_->getStateSpace()->interpolate(nmotion->state, rstate, maxDistance_ / d, xstate);
+            // std::cout << "after interpolation" << std::endl;
+            si_->printState(xstate, std::cout);
             dstate = xstate;
         }
 
         if (si_->checkMotion(nmotion->state, dstate))
         {
-            if (addIntermediateStates_)
-            {
-                std::vector<base::State *> states;
-                const unsigned int count = si_->getStateSpace()->validSegmentCount(nmotion->state, dstate);
-
-                if (si_->getMotionStates(nmotion->state, dstate, states, count, true, true))
-                    si_->freeState(states[0]);
-
-                for (std::size_t i = 1; i < states.size(); ++i)
-                {
-                    Motion *motion = new Motion;
-                    motion->state = states[i];
-                    motion->parent = nmotion;
-                    nn_->add(motion);
-
-                    nmotion = motion;
-                }
-            }
-            else
-            {
-                Motion *motion = new Motion(si_);
-                si_->copyState(motion->state, dstate);
-                motion->parent = nmotion;
-                nn_->add(motion);
-
-                nmotion = motion;
-            }
+            // std::cout << "check motion" << std::endl;
+            Motion *motion = new Motion(si_);
+            // si_->copyState(motion->state, dstate);
+            motion->parent = nmotion;
+            nn_->add(motion);
+            nmotion = motion;
+            
 
             double dist = 0.0;
             bool sat = goal->isSatisfied(nmotion->state, &dist);
@@ -204,7 +191,12 @@ ompl::base::PlannerStatus ompl::geometric::No_RRT::solve(const base::PlannerTerm
     delete rmotion;
 
     OMPL_INFORM("%s: Created %u states", getName().c_str(), nn_->size());
-
+    std::vector<Motion *> motions;
+    nn_->list(motions);
+    for (auto &motion : motions)
+    {
+        si_->printState(motion->state);
+    }
     return base::PlannerStatus(solved, approximate);
 }
 
