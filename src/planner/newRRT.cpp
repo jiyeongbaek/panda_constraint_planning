@@ -1,27 +1,27 @@
 
 
-#include <constraint_planner/planner/No_RRT.h>
+#include <constraint_planner/planner/newRRT.h>
 #include <limits>
 #include <ompl/base/goals/GoalSampleableRegion.h>
 #include <ompl/tools/config/SelfConfig.h>
 
-ompl::geometric::No_RRT::No_RRT(const base::SpaceInformationPtr &si, bool addIntermediateStates)
-  : base::Planner(si, addIntermediateStates ? "No_RRTintermediate" : "No_RRT")
+ompl::geometric::newRRT::newRRT(const base::SpaceInformationPtr &si, bool addIntermediateStates)
+  : base::Planner(si, addIntermediateStates ? "newRRTintermediate" : "newRRT")
 {
     specs_.approximateSolutions = true;
     specs_.directed = true;
 
-    Planner::declareParam<double>("range", this, &No_RRT::setRange, &No_RRT::getRange, "0.:1.:10000.");
-    Planner::declareParam<double>("goal_bias", this, &No_RRT::setGoalBias, &No_RRT::getGoalBias, "0.:.05:1.");
+    Planner::declareParam<double>("range", this, &newRRT::setRange, &newRRT::getRange, "0.:1.:10000.");
+    Planner::declareParam<double>("goal_bias", this, &newRRT::setGoalBias, &newRRT::getGoalBias, "0.:.05:1.");
 
 }
 
-ompl::geometric::No_RRT::~No_RRT()
+ompl::geometric::newRRT::~newRRT()
 {
     freeMemory();
 }
 
-void ompl::geometric::No_RRT::clear()
+void ompl::geometric::newRRT::clear()
 {
     Planner::clear();
     sampler_.reset();
@@ -31,7 +31,7 @@ void ompl::geometric::No_RRT::clear()
     lastGoalMotion_ = nullptr;
 }
 
-void ompl::geometric::No_RRT::setup()
+void ompl::geometric::newRRT::setup()
 {
     Planner::setup();
     tools::SelfConfig sc(si_, getName());
@@ -42,7 +42,7 @@ void ompl::geometric::No_RRT::setup()
     nn_->setDistanceFunction([this](const Motion *a, const Motion *b) { return distanceFunction(a, b); });
 }
 
-void ompl::geometric::No_RRT::freeMemory()
+void ompl::geometric::newRRT::freeMemory()
 {
     if (nn_)
     {
@@ -57,7 +57,7 @@ void ompl::geometric::No_RRT::freeMemory()
     }
 }
 
-ompl::base::PlannerStatus ompl::geometric::No_RRT::solve(const base::PlannerTerminationCondition &ptc)
+ompl::base::PlannerStatus ompl::geometric::newRRT::solve(const base::PlannerTerminationCondition &ptc)
 {
     checkValidity();
     base::Goal *goal = pdef_->getGoal().get();
@@ -200,7 +200,7 @@ ompl::base::PlannerStatus ompl::geometric::No_RRT::solve(const base::PlannerTerm
     return base::PlannerStatus(solved, approximate);
 }
 
-void ompl::geometric::No_RRT::getPlannerData(base::PlannerData &data) const
+void ompl::geometric::newRRT::getPlannerData(base::PlannerData &data) const
 {
     Planner::getPlannerData(data);
 

@@ -13,7 +13,8 @@
 
 #include "GoalVisitor.hpp"
 #define foreach BOOST_FOREACH
-
+using namespace Eigen;
+using namespace std;
 namespace ompl
 {
     namespace magic
@@ -27,18 +28,12 @@ namespace ompl
 
         /** \brief The number of nearest neighbors to consider by
             default in the construction of the newPRM roadmap */
-        static const unsigned int DEFAULT_NEAREST_NEIGHBORS = 30;
-    }
-}
+        static const unsigned int DEFAULT_NEAREST_NEIGHBORS = 5;
+    } // namespace magic
+} // namespace ompl
 
 ompl::geometric::newPRM::newPRM(const base::SpaceInformationPtr &si, bool starStrategy)
-  : base::Planner(si, "newPRM")
-  , starStrategy_(starStrategy)
-  , stateProperty_(boost::get(vertex_state_t(), g_))
-  , totalConnectionAttemptsProperty_(boost::get(vertex_total_connection_attempts_t(), g_))
-  , successfulConnectionAttemptsProperty_(boost::get(vertex_successful_connection_attempts_t(), g_))
-  , weightProperty_(boost::get(boost::edge_weight, g_))
-  , disjointSets_(boost::get(boost::vertex_rank, g_), boost::get(boost::vertex_predecessor, g_))
+    : base::Planner(si, "newPRM"), starStrategy_(starStrategy), stateProperty_(boost::get(vertex_state_t(), g_)), totalConnectionAttemptsProperty_(boost::get(vertex_total_connection_attempts_t(), g_)), successfulConnectionAttemptsProperty_(boost::get(vertex_successful_connection_attempts_t(), g_)), weightProperty_(boost::get(boost::edge_weight, g_)), disjointSets_(boost::get(boost::vertex_rank, g_), boost::get(boost::vertex_predecessor, g_))
 {
     u_eigen.resize(14);
     v_eigen.resize(14);
@@ -51,22 +46,18 @@ ompl::geometric::newPRM::newPRM(const base::SpaceInformationPtr &si, bool starSt
         Planner::declareParam<unsigned int>("max_nearest_neighbors", this, &newPRM::setMaxNearestNeighbors,
                                             std::string("8:1000"));
 
-    addPlannerProgressProperty("iterations INTEGER", [this]
-                               {
-                                   return getIterationCount();
-                               });
-    addPlannerProgressProperty("best cost REAL", [this]
-                               {
-                                   return getBestCost();
-                               });
-    addPlannerProgressProperty("milestone count INTEGER", [this]
-                               {
-                                   return getMilestoneCountString();
-                               });
-    addPlannerProgressProperty("edge count INTEGER", [this]
-                               {
-                                   return getEdgeCountString();
-                               });
+    addPlannerProgressProperty("iterations INTEGER", [this] {
+        return getIterationCount();
+    });
+    addPlannerProgressProperty("best cost REAL", [this] {
+        return getBestCost();
+    });
+    addPlannerProgressProperty("milestone count INTEGER", [this] {
+        return getMilestoneCountString();
+    });
+    addPlannerProgressProperty("edge count INTEGER", [this] {
+        return getEdgeCountString();
+    });
 }
 
 ompl::geometric::newPRM::~newPRM()
@@ -79,20 +70,18 @@ void ompl::geometric::newPRM::setup()
     Planner::setup();
     if (!nn_)
     {
-        specs_.multithreaded = false;  // temporarily set to false since nn_ is used only in single thread
+        specs_.multithreaded = false; // temporarily set to false since nn_ is used only in single thread
         nn_.reset(tools::SelfConfig::getDefaultNearestNeighbors<Vertex>(this));
         specs_.multithreaded = true;
-        nn_->setDistanceFunction([this](const Vertex a, const Vertex b)
-                                 {
-                                     return distanceFunction(a, b);
-                                 });
+        nn_->setDistanceFunction([this](const Vertex a, const Vertex b) {
+            return distanceFunction(a, b);
+        });
     }
     if (!connectionStrategy_)
     {
         if (starStrategy_)
             connectionStrategy_ = KStarStrategy<Vertex>(
-                [this]
-                {
+                [this] {
                     return milestoneCount();
                 },
                 nn_, si_->getStateDimension());
@@ -100,8 +89,7 @@ void ompl::geometric::newPRM::setup()
             connectionStrategy_ = KStrategy<Vertex>(magic::DEFAULT_NEAREST_NEIGHBORS, nn_);
     }
     if (!connectionFilter_)
-        connectionFilter_ = [](const Vertex &, const Vertex &)
-        {
+        connectionFilter_ = [](const Vertex &, const Vertex &) {
             return true;
         };
 
@@ -134,13 +122,12 @@ void ompl::geometric::newPRM::setMaxNearestNeighbors(unsigned int k)
         throw Exception("Cannot set the maximum nearest neighbors for " + getName());
     if (!nn_)
     {
-        specs_.multithreaded = false;  // temporarily set to false since nn_ is used only in single thread
+        specs_.multithreaded = false; // temporarily set to false since nn_ is used only in single thread
         nn_.reset(tools::SelfConfig::getDefaultNearestNeighbors<Vertex>(this));
         specs_.multithreaded = true;
-        nn_->setDistanceFunction([this](const Vertex a, const Vertex b)
-                                 {
-                                     return distanceFunction(a, b);
-                                 });
+        nn_->setDistanceFunction([this](const Vertex a, const Vertex b) {
+            return distanceFunction(a, b);
+        });
     }
     if (!userSetConnectionStrategy_)
         connectionStrategy_ = ConnectionStrategy();
@@ -199,7 +186,7 @@ void ompl::geometric::newPRM::expandRoadmap(const base::PlannerTerminationCondit
 }
 
 void ompl::geometric::newPRM::expandRoadmap(const base::PlannerTerminationCondition &ptc,
-                                         std::vector<base::State *> &workStates)
+                                            std::vector<base::State *> &workStates)
 {
     // construct a probability distribution over the vertices in the roadmap
     // as indicated in
@@ -244,6 +231,7 @@ void ompl::geometric::newPRM::expandRoadmap(const base::PlannerTerminationCondit
                 uniteComponents(v, m);
 
                 // add the vertex to the nearest neighbors data structure
+                // std::cout << "add vertex " << std::endl;
                 nn_->add(m);
                 v = m;
             }
@@ -273,7 +261,7 @@ void ompl::geometric::newPRM::growRoadmap(const base::PlannerTerminationConditio
     if (!isSetup())
         setup();
     if (!sampler_)
-        sampler_ = si_-> allocValidStateSampler();
+        sampler_ = si_->allocValidStateSampler();
 
     base::State *workState = si_->allocState();
     growRoadmap(ptc, workState, mid, distance);
@@ -311,7 +299,6 @@ void ompl::geometric::newPRM::growRoadmap(const base::PlannerTerminationConditio
     }
 }
 
-
 void ompl::geometric::newPRM::checkForSolution(const base::PlannerTerminationCondition &ptc, base::PathPtr &solution)
 {
     auto *goal = static_cast<base::GoalSampleableRegion *>(pdef_->getGoal().get());
@@ -334,7 +321,7 @@ void ompl::geometric::newPRM::checkForSolution(const base::PlannerTerminationCon
 }
 
 bool ompl::geometric::newPRM::maybeConstructSolution(const std::vector<Vertex> &starts, const std::vector<Vertex> &goals,
-                                                  base::PathPtr &solution)
+                                                     base::PathPtr &solution)
 {
     base::Goal *g = pdef_->getGoal().get();
     base::Cost sol_cost(opt_->infiniteCost());
@@ -383,7 +370,7 @@ ompl::base::PlannerStatus ompl::geometric::newPRM::solve(const base::PlannerTerm
 {
     checkValidity();
     auto *goal = dynamic_cast<base::GoalSampleableRegion *>(pdef_->getGoal().get());
-    
+
     if (goal == nullptr)
     {
         OMPL_ERROR("%s: Unknown type of goal", getName().c_str());
@@ -393,7 +380,7 @@ ompl::base::PlannerStatus ompl::geometric::newPRM::solve(const base::PlannerTerm
     // Add the valid start states as milestones
     while (const base::State *st = pis_.nextStart())
         startM_.push_back(addMilestone(si_->cloneState(st)));
-    
+
     if (startM_.empty())
     {
         OMPL_ERROR("%s: There are no valid initial states!", getName().c_str());
@@ -428,35 +415,37 @@ ompl::base::PlannerStatus ompl::geometric::newPRM::solve(const base::PlannerTerm
     // Reset addedNewSolution_ member and create solution checking thread
     addedNewSolution_ = false;
     base::PathPtr sol;
-    std::thread slnThread([this, &ptc, &sol]
-                          {
-                              checkForSolution(ptc, sol);
-                          });
+    std::thread slnThread([this, &ptc, &sol] {
+        checkForSolution(ptc, sol);
+    });
 
     // construct new planner termination condition that fires when the given ptc is true, or a solution is found
-    base::PlannerTerminationCondition ptcOrSolutionFound([this, &ptc]
-                                                         {
-                                                             return ptc || addedNewSolution();
-                                                         });
+    base::PlannerTerminationCondition ptcOrSolutionFound([this, &ptc] {
+        return ptc || addedNewSolution();
+    });
     base::State *mid = si_->allocState();
     constructRoadmap(ptcOrSolutionFound, mid, 0.0);
-    
+
     // Ensure slnThread is ceased before exiting solve
     slnThread.join();
 
     OMPL_INFORM("%s: Created %u states", getName().c_str(), boost::num_vertices(g_) - nrStartStates);
-    std::vector<Vertex> motions;
-    nn_->list(motions);
-    for (auto &motion : motions)
-    {
-        si_->printState(stateProperty_[motion]);
-    }
+    // foreach (Vertex v, boost::vertices(g_))
+    //     si_->printState(stateProperty_[v]);
+
+    // std::vector<Vertex> motions;
+    // nn_->list(motions);
+    // for (auto &motion : motions)
+    // {
+    //     si_->printState(stateProperty_[motion]);
+    // }
 
     if (sol)
     {
         base::PlannerSolution psol(sol);
         psol.setPlannerName(getName());
         // if the solution was optimized, we mark it as such
+        //Set the optimization objective used to optimize this solution, the cost of the solution and whether it was optimized or not.
         psol.setOptimized(opt_, bestCost_, addedNewSolution());
         pdef_->addSolutionPath(psol);
     }
@@ -474,7 +463,6 @@ ompl::base::PlannerStatus ompl::geometric::newPRM::solve(const base::PlannerTerm
         return base::PlannerStatus::APPROXIMATE_SOLUTION;
     }
 
-
     return sol ? base::PlannerStatus::EXACT_SOLUTION : base::PlannerStatus::TIMEOUT;
 }
 
@@ -483,7 +471,7 @@ void ompl::geometric::newPRM::constructRoadmap(const base::PlannerTerminationCon
     if (!isSetup())
         setup();
     if (!sampler_)
-        sampler_ = si_-> allocValidStateSampler();
+        sampler_ = si_->allocValidStateSampler();
     if (!simpleSampler_)
         simpleSampler_ = si_->allocStateSampler();
 
@@ -498,7 +486,7 @@ void ompl::geometric::newPRM::constructRoadmap(const base::PlannerTerminationCon
         // call growRoadmap() twice as long for every call of expandRoadmap()
         if (grow)
         {
-            std::cout << "grow roadmap" << std::endl;
+            // std::cout << "grow roadmap" << std::endl;
 
             growRoadmap(base::plannerOrTerminationCondition(
                             ptc, base::timedPlannerTerminationCondition(2.0 * magic::ROADMAP_BUILD_TIME)),
@@ -506,7 +494,7 @@ void ompl::geometric::newPRM::constructRoadmap(const base::PlannerTerminationCon
         }
         else
         {
-            std::cout << "expand roadmap" << std::endl;
+            // std::cout << "expand roadmap" << std::endl;
             expandRoadmap(base::plannerOrTerminationCondition(
                               ptc, base::timedPlannerTerminationCondition(magic::ROADMAP_BUILD_TIME)),
                           xstates);
@@ -516,7 +504,6 @@ void ompl::geometric::newPRM::constructRoadmap(const base::PlannerTerminationCon
 
     si_->freeStates(xstates);
 }
-
 
 ompl::geometric::newPRM::Vertex ompl::geometric::newPRM::addMilestone(base::State *state)
 {
@@ -537,7 +524,6 @@ ompl::geometric::newPRM::Vertex ompl::geometric::newPRM::addMilestone(base::Stat
         {
             totalConnectionAttemptsProperty_[m]++;
             totalConnectionAttemptsProperty_[n]++;
-         
             if (si_->checkMotion(stateProperty_[n], stateProperty_[m])) // 여기서 interpolate 하면서 check
             {
                 successfulConnectionAttemptsProperty_[m]++;
@@ -547,7 +533,6 @@ ompl::geometric::newPRM::Vertex ompl::geometric::newPRM::addMilestone(base::Stat
                 boost::add_edge(n, m, properties, g_);
                 uniteComponents(n, m);
             }
-
         }
 
     nn_->add(m);
@@ -573,7 +558,7 @@ ompl::base::Cost ompl::geometric::newPRM::constructApproximateSolution(const std
 
     foreach (Vertex start, starts)
     {
-        foreach(Vertex goal, goals)
+        foreach (Vertex goal, goals)
         {
             base::Cost heuristicCost(costHeuristic(start, goal));
             if (opt_->isCostBetterThan(heuristicCost, closestVal))
@@ -650,23 +635,21 @@ ompl::base::PathPtr ompl::geometric::newPRM::constructSolution(const Vertex &sta
     try
     {
         // Consider using a persistent distance_map if it's slow
-        boost::astar_search(g_, start,
-                            [this, goal](Vertex v)
-                            {
-                                return costHeuristic(v, goal);
-                            },
-                            boost::predecessor_map(prev)
-                                .distance_compare([this](base::Cost c1, base::Cost c2)
-                                                  {
-                                                      return opt_->isCostBetterThan(c1, c2);
-                                                  })
-                                .distance_combine([this](base::Cost c1, base::Cost c2)
-                                                  {
-                                                      return opt_->combineCosts(c1, c2);
-                                                  })
-                                .distance_inf(opt_->infiniteCost())
-                                .distance_zero(opt_->identityCost())
-                                .visitor(AStarGoalVisitor<Vertex>(goal)));
+        boost::astar_search(
+            g_, start,
+            [this, goal](Vertex v) {
+                return costHeuristic(v, goal);
+            },
+            boost::predecessor_map(prev)
+                .distance_compare([this](base::Cost c1, base::Cost c2) {
+                    return opt_->isCostBetterThan(c1, c2);
+                })
+                .distance_combine([this](base::Cost c1, base::Cost c2) {
+                    return opt_->combineCosts(c1, c2);
+                })
+                .distance_inf(opt_->infiniteCost())
+                .distance_zero(opt_->identityCost())
+                .visitor(AStarGoalVisitor<Vertex>(goal)));
     }
     catch (AStarFoundGoal &)
     {
@@ -717,13 +700,12 @@ ompl::base::Cost ompl::geometric::newPRM::costHeuristic(Vertex u, Vertex v) cons
 {
     // auto u_ = stateProperty_[u];
     // auto v_ = stateProperty_[v]; //access to the internal base::state at each Vertex.
-    
+
     // auto *prev_ = u_->as<ompl::base::ConstrainedStateSpace::StateType>()->getState()->as<KinematicChainSpace::StateType>();
     // auto *current_ = v_->as<ompl::base::ConstrainedStateSpace::StateType>()->getState()->as<KinematicChainSpace::StateType>();
 
     // Eigen::VectorXd prev =  Eigen::Map<const Eigen::VectorXd>(prev_->values, 14);
     // Eigen::VectorXd current =  Eigen::Map<const Eigen::VectorXd>(current_->values, 14);
-
 
     // Eigen::Affine3d u_trans = panda_arm->getTransform(prev.head<7>());
     // Eigen::Affine3d v_trans = panda_arm->getTransform(current.head<7>());
@@ -734,16 +716,18 @@ ompl::base::Cost ompl::geometric::newPRM::costHeuristic(Vertex u, Vertex v) cons
     // ompl::base::Cost cost(d+r);
     // std::cout << d << " " << r << std::endl;
     // return cost;
-    // return opt_->motionCostHeuristic(stateProperty_[u], stateProperty_[v]);
 
+    return opt_->motionCostHeuristic(stateProperty_[u], stateProperty_[v]);
 }
 
 
-    // auto *start_state = pdef_->getStartState(0)->as<base::ConstrainedStateSpace::StateType>()->getState()->as<KinematicChainSpace::StateType>();
-    // auto *goal_state = goal->as<base::GoalState>()->getState()->as<base::ConstrainedStateSpace::StateType>()->getState()->as<KinematicChainSpace::StateType>();
-    // Eigen::VectorXd distance(14);
-    // for (int i = 0; i < 14; i++)      
-    // {
-    //     mid->as<base::ConstrainedStateSpace::StateType>()->getState()->as<KinematicChainSpace::StateType>()->values[i] = (start_state->values[i] + goal_state->values[i] ) /2.0;
-    //     distance[i] = goal_state->values[i] - start_state->values[i];
-    // }
+
+
+// auto *start_state = pdef_->getStartState(0)->as<base::ConstrainedStateSpace::StateType>()->getState()->as<KinematicChainSpace::StateType>();
+// auto *goal_state = goal->as<base::GoalState>()->getState()->as<base::ConstrainedStateSpace::StateType>()->getState()->as<KinematicChainSpace::StateType>();
+// Eigen::VectorXd distance(14);
+// for (int i = 0; i < 14; i++)
+// {
+//     mid->as<base::ConstrainedStateSpace::StateType>()->getState()->as<KinematicChainSpace::StateType>()->values[i] = (start_state->values[i] + goal_state->values[i] ) /2.0;
+//     distance[i] = goal_state->values[i] - start_state->values[i];
+// }

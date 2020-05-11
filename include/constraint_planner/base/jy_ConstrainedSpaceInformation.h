@@ -11,7 +11,7 @@
 #include "ompl/util/Console.h"
 #include "ompl/util/Exception.h"
 
-#include <constraint_planner/KinematicChain.h>
+#include <constraint_planner/kinematics/KinematicChain.h>
 namespace ompl
 {
     namespace base
@@ -51,35 +51,7 @@ namespace ompl
                 while (!(valid = si_->isValid(state) && constraint_->isSatisfied(state)) && ++tries < 50);
                 return valid;
             }            
-            
-            // jy ftn 
-            // bool sampleNear(State *state, const State *near, double distance) override
-            // {
-            //     unsigned int tries = 0;
-            //     std::cout << "test " << std::endl;
-            //     bool valid;
-            //     do{
-            //         sampleUniformNear(state, near, distance);
-            //     } while (!(valid = si_->isValid(state) && constraint_->isSatisfied(state)) && ++tries < 50);
-            //     return valid;
-            // }     
-
-            void sampleUniformNear(State *state, const State *near, const double distance)
-            {
-                // auto *rstate = static_cast<RealVectorStateSpace::StateType *>(state);
-                auto *rstate = state->as<ConstrainedStateSpace::StateType>()->getState()->as<KinematicChainSpace::StateType>();
-                for (unsigned int i = 0; i < 14; ++i)
-                {
-                    rstate->values[i] = rng_.uniformReal(start_state[i], goal_state[i]);
-                }
-            }
-
-            void setStartAndGoalStates(const Eigen::Ref<const Eigen::VectorXd> &start, const Eigen::Ref<const Eigen::VectorXd> &goal)
-            {
-                start_state = start;
-                goal_state = goal;
-            }
-
+        
         private:
             StateSamplerPtr sampler_;
             int attempts;

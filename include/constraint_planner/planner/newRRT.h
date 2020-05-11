@@ -6,20 +6,20 @@
 
 #include <ompl/base/spaces/RealVectorStateSpace.h>
 #include <ompl/base/goals/GoalState.h>
-#include <constraint_planner/KinematicChain.h>
+#include <constraint_planner/kinematics/KinematicChain.h>
 
 namespace ompl
 {
     namespace geometric
     {
         /** \brief Rapidly-exploring Random Trees */
-        class No_RRT : public base::Planner
+        class newRRT : public base::Planner
         {
         public:
             /** \brief Constructor */
-            No_RRT(const base::SpaceInformationPtr &si, bool addIntermediateStates = false);
+            newRRT(const base::SpaceInformationPtr &si, bool addIntermediateStates = false);
 
-            ~No_RRT() override;
+            ~newRRT() override;
 
             void getPlannerData(base::PlannerData &data) const override;
 

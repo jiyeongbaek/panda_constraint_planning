@@ -1,8 +1,12 @@
 #pragma once
 
-// #include <Eigen/Dense>
-#include <Eigen/Core>
-#include <constraint_planner/model.h>
+#include <Eigen/Dense>
+// #include <Eigen/Core>
+#include "model.h"
+
+#include <trac_ik/trac_ik.hpp>
+#include <kdl/chainiksolverpos_nr_jl.hpp>
+#include <kdl_parser/kdl_parser.hpp>
 
 #include <rbdl/rbdl.h>
 #include <iostream>
@@ -69,4 +73,24 @@ struct FrankaModelUpdater
 
 public:
     double delta_tau_max_{0.05};
+};
+
+
+
+class panda_ik
+{
+public:
+    panda_ik();
+    bool solve(VectorXd start, Affine3d target, Eigen::Ref<Eigen::VectorXd> solution);
+    Eigen::VectorXd getRandomConfig();
+    bool randomSolve(Affine3d target, Eigen::Ref<Eigen::VectorXd> solution);
+
+
+private:
+    std::string chain_start{"panda_link0"};
+    std::string chain_end{"panda_hand"};
+    TRAC_IK::TRAC_IK tracik_solver;
+    KDL::Chain chain;
+    Eigen::VectorXd lb_, ub_;
+    Eigen::VectorXd length;
 };

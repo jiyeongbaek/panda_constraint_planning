@@ -10,11 +10,11 @@
 #include <vector>
 #include <map>
 
-#include <constraint_planner/panda_model_updater.h>
+#include <constraint_planner/kinematics/panda_model_updater.h>
 #include <ompl/base/spaces/constraint/ConstrainedStateSpace.h>
 
 #include <ompl/base/ConstrainedSpaceInformation.h>
-#include <constraint_planner/KinematicChain.h>
+#include <constraint_planner/kinematics/KinematicChain.h>
 
 #include <ompl/base/goals/GoalState.h>
 

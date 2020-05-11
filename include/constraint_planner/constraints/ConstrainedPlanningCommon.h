@@ -12,57 +12,30 @@
 #include <constraint_planner/base/jy_ConstrainedSpaceInformation.h>
 
 #include <ompl/base/spaces/constraint/ConstrainedStateSpace.h>
-#include <ompl/base/spaces/constraint/AtlasStateSpace.h>
-#include <ompl/base/spaces/constraint/TangentBundleStateSpace.h>
 // #include <ompl/base/spaces/constraint/ProjectedStateSpace.h>
 #include <constraint_planner/base/jy_ProjectedStateSpace.h>
 
 #include <ompl/geometric/planners/rrt/RRT.h>
 #include <ompl/geometric/planners/rrt/RRTConnect.h>
 #include <ompl/geometric/planners/prm/PRM.h>
-#include <constraint_planner/planner/No_RRT.h>
+#include <constraint_planner/planner/newRRT.h>
 #include <constraint_planner/planner/newPRM.h>
 #include <ompl/tools/benchmark/Benchmark.h>
+#include <ompl/base/goals/GoalLazySamples.h>
 
+#include <ompl/base/spaces/SE3StateSpace.h>
 namespace ob = ompl::base;
 namespace og = ompl::geometric;
 namespace om = ompl::magic;
 namespace ot = ompl::tools;
-
-enum SPACE_TYPE
-{
-    PJ = 0,
-    PJ2 = 1,
-    AT = 2,
-    TB = 3
-};
-
-const std::string spaceStr[4] = {"PJ", "PJ2", "AT", "TB"};
-
-std::istream &operator>>(std::istream &in, enum SPACE_TYPE &type)
-{
-    std::string token;
-    in >> token;
-    if (token == "PJ")
-        type = PJ;
-    else if (token == "AT")
-        type = AT;
-    else if (token == "PJ2")
-        type = PJ2;
-    else if (token == "TB")
-        type = TB;
-    else
-        in.setstate(std::ios_base::failbit);
-
-    return in;
-}
-
+using namespace Eigen;
+using namespace std;
 enum PLANNER_TYPE
 {
     RRT,
     RRTConnect,
     PRM,
-    No_RRT,
+    newRRT,
     newPRM
 };
 
@@ -76,8 +49,8 @@ std::istream &operator>>(std::istream &in, enum PLANNER_TYPE &type)
         type = RRTConnect;
     else if (token == "PRM")
         type = PRM;
-    else if (token == "No_RRT")
-        type = No_RRT;
+    else if (token == "newRRT")
+        type = newRRT;
     else if (token == "newPRM")
         type = newPRM;
     else
@@ -85,7 +58,6 @@ std::istream &operator>>(std::istream &in, enum PLANNER_TYPE &type)
 
     return in;
 }
-
 
 struct ConstrainedOptions
 {
@@ -98,61 +70,38 @@ struct ConstrainedOptions
     double range;
 };
 
-struct AtlasOptions
-{
-    double epsilon;
-    double rho;
-    double exploration;
-    double alpha;
-    bool bias;
-    bool separate;
-    unsigned int charts;
-};
-
 class ConstrainedProblem
 {
 public:
-    ConstrainedProblem(enum SPACE_TYPE type, ob::StateSpacePtr space_, ChainConstraintPtr constraint_)
-      : type(type), space(std::move(space_)), constraint(std::move(constraint_))
+    ConstrainedProblem(ob::StateSpacePtr space_, ChainConstraintPtr constraint_)
+        : space(std::move(space_)), constraint(std::move(constraint_))
     {
-        switch (type)
-        {
-            case PJ:
-                OMPL_INFORM("Using Projection-Based State Space!");
-                css = std::make_shared<jy_ProjectedStateSpace>(space, constraint);
-                csi = std::make_shared<ob::jy_ConstrainedSpaceInformation>(css);
-                break;
-            case PJ2:
-                OMPL_INFORM("Using Projection-Based (no random s) State Space!");
-                css = std::make_shared<jy_ProjectedStateSpace>(space, constraint);
-                csi = std::make_shared<ob::jy_ConstrainedSpaceInformation>(css);
-                break;
-            case AT:
-                OMPL_INFORM("Using Atlas-Based State Space!");
-                css = std::make_shared<ob::AtlasStateSpace>(space, constraint);
-                csi = std::make_shared<ob::jy_ConstrainedSpaceInformation>(css);
-                break;
-            case TB:
-                OMPL_INFORM("Using Tangent Bundle-Based State Space!");
-                css = std::make_shared<ob::TangentBundleStateSpace>(space, constraint);
-                csi = std::make_shared<ob::jy_TangentBundleSpaceInformation>(css);
-                break;
-        }
-        
+        OMPL_INFORM("Using Projection-Based State Space!");
+        css = std::make_shared<jy_ProjectedStateSpace>(space, constraint);
+        csi = std::make_shared<ob::jy_ConstrainedSpaceInformation>(css);
         css->setup();
         ss = std::make_shared<og::SimpleSetup>(csi);
+
+        base_left.translation() = Vector3d(0, 0.3, 0.6);
+        base_right.translation() = Vector3d(0, -0.3, 0.6);
+        base_left.linear().setIdentity();
+        base_right.linear().setIdentity();
+        
+        grasping_point grp;
+        obj_Lgrasp = grp.obj_Lgrasp;
+        obj_Rgrasp = grp.obj_Rgrasp;
     }
 
     /* . The distance between each point in the discrete geodesic is tuned by the "delta" parameter
          Valid step size for manifold traversal with delta*/
     void setConstrainedOptions()
-    {   
+    {
         // rrt 되는거
-        c_opt.delta =  0.10; //0.075
+        c_opt.delta = 0.1; //0.075
 
         c_opt.lambda = 2.0;
-        c_opt.tolerance1 = 0.005; //0.001
-        c_opt.tolerance2 = 0.05; // 0.01;
+        c_opt.tolerance1 = 0.007; //0.001
+        c_opt.tolerance2 = 0.08;  // 0.01;
         c_opt.time = 60.;
         c_opt.tries = 200;
         c_opt.range = 1.5;
@@ -164,37 +113,6 @@ public:
         css->setLambda(c_opt.lambda);
     }
 
-    void setAtlasOptions()
-    {
-        a_opt.epsilon = 0.1; //1.0
-        a_opt.rho = 0.01; //::CONSTRAINED_STATE_SPACE_DELTA * om::ATLAS_STATE_SPACE_RHO_MULTIPLIER; //the maximum radius for which a chart is valid. Default 0.1.
-        a_opt.exploration = 0.05; // om::ATLAS_STATE_SPACE_EXPLORATION;
-        a_opt.alpha = om::ATLAS_STATE_SPACE_ALPHA;
-        a_opt.bias = false;
-        a_opt.separate = false; //default : false
-        a_opt.charts = om::ATLAS_STATE_SPACE_MAX_CHARTS_PER_EXTENSION;
-
-        if (!(type == AT || type == TB))
-            return;
-
-        auto &&atlas = css->as<ob::AtlasStateSpace>();
-        atlas->setExploration(a_opt.exploration);
-        atlas->setEpsilon(a_opt.epsilon);
-        atlas->setRho(a_opt.rho);
-        atlas->setAlpha(a_opt.alpha);
-        atlas->setMaxChartsPerExtension(a_opt.charts);
-
-        if (a_opt.bias)
-            atlas->setBiasFunction([atlas](ompl::base::AtlasChart *c) -> double {
-                return (atlas->getChartCount() - c->getNeighborCount()) + 1;
-            });
-
-        if (type == AT)
-            atlas->setSeparated(!a_opt.separate);
-
-        atlas->setup();
-    }
-
     void setStartAndGoalStates(const Eigen::Ref<const Eigen::VectorXd> &start,
                                const Eigen::Ref<const Eigen::VectorXd> &goal)
     {
@@ -204,20 +122,6 @@ public:
 
         sstart->as<ob::ConstrainedStateSpace::StateType>()->copy(start);
         sgoal->as<ob::ConstrainedStateSpace::StateType>()->copy(goal);
-
-        switch (type)
-        {
-            case AT:
-            case TB:
-                css->as<ob::AtlasStateSpace>()->anchorChart(sstart.get());
-                css->as<ob::AtlasStateSpace>()->anchorChart(sgoal.get());
-                break;
-            default:
-                break;
-        }
-
-        // Setup problem
-        // csi->ValidStateSamplerAllocator->setStartAndGoalStates(start, goal);
         ss->setStartAndGoalStates(sstart, sgoal);
     }
 
@@ -240,13 +144,7 @@ public:
     {
         auto &&planner = createPlanner<_T>();
 
-        if (c_opt.range == 0)
-        {
-            if (type == AT || type == TB)
-                planner->setRange(css->as<ob::AtlasStateSpace>()->getRho_s());
-        }
-        else
-            planner->setRange(c_opt.range);
+        planner->setRange(c_opt.range);
 
         return std::move(planner);
     }
@@ -256,13 +154,7 @@ public:
     {
         auto &&planner = createPlannerIntermediate<_T>();
 
-        if (c_opt.range == 0)
-        {
-            if (type == AT || type == TB)
-                planner->setRange(css->as<ob::AtlasStateSpace>()->getRho_s());
-        }
-        else
-            planner->setRange(c_opt.range);
+        planner->setRange(c_opt.range);
 
         return std::move(planner);
     }
@@ -284,24 +176,24 @@ public:
         ob::PlannerPtr p;
         switch (planner)
         {
-            case RRT:
-                p = createPlannerRange<og::RRT>();
-                break;
-            case RRTConnect:
-                p = createPlannerRange<og::RRTConnect>();
-                break;
-           
-            case PRM:
-                p = createPlanner<og::PRM>();
-                break;
+        case RRT:
+            p = createPlannerRange<og::RRT>();
+            break;
+        case RRTConnect:
+            p = createPlannerRange<og::RRTConnect>();
+            break;
 
-            case No_RRT:
-                p = createPlanner<og::No_RRT>();
-                break;
+        case PRM:
+            p = createPlanner<og::PRM>();
+            break;
 
-            case newPRM:
-                p = createPlanner<og::newPRM>();
-                break;
+        case newRRT:
+            p = createPlanner<og::newRRT>();
+            break;
+
+        case newPRM:
+            p = createPlanner<og::newPRM>();
+            break;
         }
         return p;
     }
@@ -311,85 +203,46 @@ public:
         pp = getPlanner(planner, projection);
         ss->setPlanner(pp);
     }
-
-    ob::PlannerStatus solveOnce(bool output = false, const std::string &name="projection")
+    
+    ob::PlannerStatus solveOnce(bool output = false, const std::string &name = "projection")
     {
         ss->setup();
-        ob::PlannerStatus stat = ss->solve(c_opt.time); 
+        ob::GoalSamplingFn samplingFunction = [&](const ob::GoalLazySamples *gls, ob::State *result) {
+            return sampleIKgoal(gls, result);
+        };
+
+        std::shared_ptr<ompl::base::GoalLazySamples> goal;
+        goal = std::make_shared<ompl::base::GoalLazySamples>(ss->getSpaceInformation(), samplingFunction);
+        goal->addState(ss->getGoal()->as<ob::GoalState>()->getState());
+        ss->setGoal(goal);
+
+        ob::PlannerStatus stat = ss->solve(c_opt.time);
+
         if (stat)
         {
             ompl::geometric::PathGeometric path = ss->getSolutionPath();
             // if (!path.check())
             //     OMPL_WARN("Path fails check!");
-
             if (stat == ob::PlannerStatus::APPROXIMATE_SOLUTION)
                 OMPL_WARN("Solution is approximate.");
-            // OMPL_INFORM("Interpolating path ... ");
             path.printAsMatrix(std::cout);
             path.interpolate();
-
             if (output)
-            {                
+            {
                 // std::ofstream pathfile((boost::format("%1%_path.txt") % name).str()); //, std::ios::app);
-                std::ofstream pathfile("/home/jiyeong/catkin_ws/" + name + "_path.txt"); 
-                // std::ofstream pathfile("/home/jiyeong/catkin_ws/result_path.txt", std::ios::app); 
+                std::ofstream pathfile("/home/jiyeong/catkin_ws/" + name + "_path.txt");
+                OMPL_INFORM("Interpolating path & Dumping path to `%s_path.txt`.", name.c_str());
                 path.printAsMatrix(pathfile);
-                OMPL_INFORM("Interpolating path  &  Dumping path to `%s_path.txt`.", name.c_str());
                 pathfile.close();
                 std::cout << std::endl;
+                dumpGraph("test");
             }
         }
         else
             OMPL_WARN("No solution found.");
 
+        goal->as<ob::GoalLazySamples>()->stopSampling();
         return stat;
-    }
-
-    void setupBenchmark(std::vector<enum PLANNER_TYPE> &planners, const std::string &problem)
-    {
-        bench = new ot::Benchmark(*ss, problem);
-
-        bench->addExperimentParameter("n", "INTEGER", std::to_string(constraint->getAmbientDimension()));
-        bench->addExperimentParameter("k", "INTEGER", std::to_string(constraint->getManifoldDimension()));
-        bench->addExperimentParameter("n - k", "INTEGER", std::to_string(constraint->getCoDimension()));
-        bench->addExperimentParameter("space", "INTEGER", std::to_string(type));
-        
-        request = ot::Benchmark::Request(c_opt.time, 2048, 100, 0.1, true, false, true, true);
-        
-        for (auto planner : planners)
-            bench->addPlanner(getPlanner(planner, problem));
-
-        bench->setPreRunEvent([&](const ob::PlannerPtr &planner) {
-            if (type == AT || type == TB)
-                planner->getSpaceInformation()->getStateSpace()->as<ompl::base::AtlasStateSpace>()->clear();
-            else
-                planner->getSpaceInformation()->getStateSpace()->as<ompl::base::ConstrainedStateSpace>()->clear();
-
-            planner->clear();
-        });
-    }
-
-    void runBenchmark()
-    {
-        bench->benchmark(request);
-
-        auto now(ompl::time::as_string(ompl::time::now()));
-        const std::string filename =
-            (boost::format("%1%_%2%_%3%_benchmark.log") % now % bench->getExperimentName() % spaceStr[type]).str();
-
-        bench->saveResultsToFile(filename.c_str());
-    }
-
-    void atlasStats()
-    {
-        // For atlas types, output information about size of atlas and amount of space explored
-        if (type == AT || type == TB)
-        {
-            auto at = css->as<ob::AtlasStateSpace>();
-            OMPL_INFORM("Atlas has %zu charts", at->getChartCount());
-            if (type == AT)
-                OMPL_INFORM("Atlas is approximately %.3f%% open", at->estimateFrontierPercent());
-        }
     }
 
     void dumpGraph(const std::string &name)
@@ -402,31 +255,74 @@ public:
         data.printGraphML(graphfile);
         graphfile.close();
 
-        if (type == AT || type == TB)
-        {
-            OMPL_INFORM("Dumping atlas to `%s_atlas.ply`.", name.c_str());
-            std::ofstream atlasfile((boost::format("%1%_atlas.ply") % name).str());
-            css->as<ob::AtlasStateSpace>()->printPLY(atlasfile);
-            atlasfile.close();
-        }
+        std::ofstream graphfile2((boost::format("%1%_graph.dot") % name).str());
+        data.printGraphviz(graphfile2);
+        graphfile2.close();
     }
 
-    enum SPACE_TYPE type;
+    bool sampleIKgoal(const ob::GoalLazySamples *gls, ob::State *result)
+    {
+        auto sr = result->as<ob::ConstrainedStateSpace::StateType>()->as<KinematicChainSpace::StateType>();
 
+        int stefan_tries = 500;
+        while (--stefan_tries)
+        {
+            Affine3d base_obj;
+            
+            double yaw = rng_.uniformReal(-M_PI / 2, M_PI / 2);
+            base_obj.linear() = AngleAxisd(yaw, Eigen::Vector3d::UnitZ()) *
+                                AngleAxisd(0, Eigen::Vector3d::UnitY()) *
+                                AngleAxisd(M_PI/2, Eigen::Vector3d::UnitX()).toRotationMatrix();
+            base_obj.translation() = Vector3d(rng_.uniformReal(0.8, 1.1), rng_.uniformReal(-0.1, 0.1), rng_.uniformReal(0.7, 0.8));
+                
+
+            Affine3d target_left = base_left.inverse() * base_obj * obj_Lgrasp;
+            Affine3d target_right = base_right.inverse() * base_obj * obj_Rgrasp;
+
+
+            std::shared_ptr<panda_ik> panda_ik_solver = std::make_shared<panda_ik>();
+            // Eigen::VectorXd start;
+            // auto start_state = ss->getProblemDefinition()->getStartState(0);
+            // auto newstart = start_state->as<ob::ConstrainedStateSpace::StateType>()->getState()->as<KinematicChainSpace::StateType>();
+            // start = Eigen::Map<const Eigen::VectorXd>(newstart->values, 14);
+
+            // std::cout << base_obj.translation().transpose() << std::endl;
+            // std::cout << base_obj.linear() << std::endl;
+            // cout << target_left.translation().transpose() << endl;
+            // cout << target_right.translation().transpose() << endl;
+            Matrix<double, 14, 1> sol;
+            int tries = 50;
+            while (--tries)
+            {
+                // std::cout << tries << std::endl;
+                bool left, right;
+                left = panda_ik_solver->randomSolve(target_left, sol.segment<7>(0));
+                right = panda_ik_solver->randomSolve(target_right, sol.segment<7>(7));
+                if ( left && right)
+                {
+                    // Eigen::Map<Eigen::VectorXd>(sr->values, 14) = sol;
+                    for (int i = 0; i < 14; i++)
+                        result->as<ob::ConstrainedStateSpace::StateType>()->getState()->as<KinematicChainSpace::StateType>()->values[i] = sol[i];
+                    if (gls->getSpaceInformation()->isValid(result))
+                        return true;
+                }
+                else
+                    break;
+            }
+        }
+        return false;
+    }
     ob::StateSpacePtr space;
     ChainConstraintPtr constraint;
 
     ob::ConstrainedStateSpacePtr css;
-
     ob::jy_ConstrainedSpaceInformationPtr csi;
     ob::PlannerPtr pp;
-
     og::SimpleSetupPtr ss;
 
     struct ConstrainedOptions c_opt;
-    struct AtlasOptions a_opt;
+    Affine3d obj_Lgrasp, obj_Rgrasp, base_left, base_right;
 
-    ot::Benchmark *bench;
-    ot::Benchmark::Request request;
+protected:
+    ompl::RNG rng_;
 };
-

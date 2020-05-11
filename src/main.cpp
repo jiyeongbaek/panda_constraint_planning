@@ -10,8 +10,6 @@
 #include <ompl/geometric/SimpleSetup.h>
 #include <ompl/geometric/PathGeometric.h>
 
-// #include <ompl/base/Constraint.h>
-#include <constraint_planner/constraints/Constraint.h>
 
 #include <ompl/util/Time.h>
 #include <ompl/base/ConstrainedSpaceInformation.h>
@@ -26,7 +24,7 @@
 #include <ompl/geometric/PathGeometric.h>
 
 #include <constraint_planner/constraints/ConstrainedPlanningCommon.h>
-#include <constraint_planner/KinematicChain.h>
+#include <constraint_planner/kinematics/KinematicChain.h>
 #include <ctime>
 
 #include <moveit/move_group_interface/move_group_interface.h>
@@ -54,42 +52,25 @@
 #include <boost/algorithm/string.hpp>
 #include <unsupported/Eigen/MatrixFunctions>
 
-
-
 using namespace std;
 unsigned int links = 14;
-
-
-
-// bool planning(ConstrainedProblem &cp, ompl::geometric::PathGeometric &path, std::string file_name)
-
-bool planningBench(ConstrainedProblem &cp, std::vector<enum PLANNER_TYPE> &planners)
-{
-    cp.setupBenchmark(planners, "kinematic");
-    cp.bench->addExperimentParameter("links", "INTEGER", std::to_string(cp.constraint->getAmbientDimension()));
-
-    cp.runBenchmark();
-    return 0;
-}
 
 bool plannedPath(Eigen::VectorXd start, Eigen::VectorXd goal, std::string file_name)
 {
     auto ss = std::make_shared<KinematicChainSpace>(links);
-    enum SPACE_TYPE space = PJ; //"PJ", "AT", "TB"
-    std::vector<enum PLANNER_TYPE> planners = {RRT, PRM, No_RRT, newPRM}; //RRTConnect
+    std::vector<enum PLANNER_TYPE> planners = {RRT, PRM, newRRT, newPRM, RRTConnect}; //RRTConnect
 
     std::cout << "init state   : " << start.transpose() << std::endl;
     std::cout << "target state : " << goal.transpose() << std::endl;
 
     auto constraint = std::make_shared<KinematicChainConstraint>(links, start);
 
-    ConstrainedProblem cp(space, ss, constraint); // define a simple problem to solve this constrained space
+    ConstrainedProblem cp(ss, constraint); // define a simple problem to solve this constrained space
     cp.setConstrainedOptions();
-    cp.setAtlasOptions();
     cp.setStartAndGoalStates(start, goal);
     
     // cp.ss->setStateValidityChecker(std::make_shared<ConstrainedKinematicChainValidityChecker>(cp.csi));
-    // cp.ss->setStateValidityChecker(std::make_shared<KinematicChainValidityChecker>(cp.csi));
+    cp.ss->setStateValidityChecker(std::make_shared<KinematicChainValidityChecker>(cp.csi));
 
     cp.setPlanner(planners[3]);
     ob::PlannerStatus stat = cp.solveOnce(true, file_name);
@@ -126,17 +107,15 @@ void execute_path(std::string path_name, moveit::planning_interface::MoveGroupIn
 
     int n_traj = joint_trajectory.points.size();
     for (int i = 0; i < n_traj; i++)
-    {
         joint_trajectory.points[i].time_from_start = ros::Duration(total_time / n_traj * i);
-    }
+
 
     robot_trajectory.joint_trajectory = joint_trajectory;
     
     moveit::planning_interface::MoveGroupInterface::Plan plan;
     plan.trajectory_ = robot_trajectory;
     plan.planning_time_ = total_time;
-    move_group.execute(plan);
-    cout << "EXECUTE" << endl;
+    move_group.execute(plan);;
 }
 
 int main(int argc, char **argv)
@@ -152,11 +131,9 @@ int main(int argc, char **argv)
     Eigen::VectorXd start(links), goal(links);
     Matrix<double, 2, 14> goal_lists;
 
-    goal_lists << -1.6377232882241266, -1.315323930182948, 1.8320045929628053, -2.7664737781390967, 1.0296301925737725, 3.4689343789323694, 1.432766630340054, -0.10243983084379964, 0.2659588901612104, 0.4127700947518499, -1.3902073234890953, 0.06790555501862428, 1.5908404988928444, 2.0916124777614624,
-                2.28836, -1.292, -0.684402, -0.825018, -2.05174, 0.744845, 2.19023, -0.238986, 0.655853, 0.0894607, -1.77037, 1.42673, 1.39508, 1.47327;
+    goal_lists <<-1.6671076987319884, -1.4984785565179355, 1.5404192524883924, -2.388776541995507, -2.897203095390305, 3.280959665933266, -1.0941728565641882, -0.10245023002256344, 0.26594811616937525, 0.41290315245014864, -1.390080227072562, 0.06799447874492352, 1.5907921066040371, 2.0916256998720577,
+                -0.42784663202016965, 0.46688110660443566, -0.050990016440297804, -0.8969788666395989, 0.010386418882852508, 1.3656065313896382, 1.8328089096024114, -0.12732719919206942, 0.6544413855989148, -0.04499967102510616, -1.7690418525615275, 1.4836964245964588, 1.3373796725734979, 1.4676640046123115;
 
-
-    ompl::time::point start_time = ompl::time::now();
     for (int i = 0; i < goal_lists.rows() - 1; i++)
     {   
         start = goal_lists.row(i);
@@ -164,50 +141,11 @@ int main(int argc, char **argv)
         if (!plannedPath(start, goal, to_string(i)))
             break;
     }
-    OMPL_INFORM("Solution found in %f seconds", ompl::time::seconds(ompl::time::now() - start_time));
 
-
-    const std::string PLANNING_GROUP = "panda_arms";
-    moveit::planning_interface::MoveGroupInterface move_group(PLANNING_GROUP);
-
-    robot_state::RobotStatePtr robot_state = move_group.getCurrentState(); // plan_manager->robot_state_;
-    robot_model::RobotModelConstPtr robot_model = move_group.getRobotModel();
-
+    moveit::planning_interface::MoveGroupInterface move_group("panda_arms");    
     ros::Publisher display_publisher = node_handle.advertise<moveit_msgs::DisplayTrajectory>("/move_group/display_planned_path", 5, true);
     while (display_publisher.getNumSubscribers() == 0 && ros::ok())
-    {
         ros::spinOnce();
-    }
     for (int i = 0; i < goal_lists.rows() - 1; i++)
-        execute_path("/home/jiyeong/catkin_ws/" + to_string(i) + "_path.txt", move_group);
-
-    
-        
+        execute_path("/home/jiyeong/catkin_ws/" + to_string(i) + "_path.txt", move_group);        
 }
-
-
-    // goal_lists << 1.14669, -1.38017, -1.45742, -3.02049, -2.82783, 1.09462, 2.5943, 0.136339, 0.0771, 0.132456, -1.61833, 0.163069, 1.64452, 2.04722, 
- // distance : 1.79682
-// 1.14621, -1.59073, -1.15525, -2.94124, -2.58406, 1.11348, 2.33476, 0.0441954, 0.128898, 0.130295, -1.41736, 0.252909, 1.44964, 1.99681, 
- // distance : 0.26136
-// 1.18968, -1.59237, -1.11863, -2.91066, -2.52977, 1.08409, 2.33773, 0.0334045, 0.136417, 0.124587, -1.41625, 0.281727, 1.45013, 1.98884, 
-//  // distance : 1.16696
-// 1.39528, -1.60228, -0.983353, -2.73914, -2.33624, 0.94933, 2.34156, -0.0192996, 0.173522, 0.0987747, -1.42393, 0.425628, 1.45452, 1.94789, 
-//  // distance : 1.00669
-// 1.57046, -1.60047, -0.893183, -2.54753, -2.22043, 0.84452, 2.34377, -0.0695203, 0.210368, 0.0796314, -1.45146, 0.565459, 1.4618, 1.90367, 
-//  // distance : 0.908523
-// 1.72441, -1.59743, -0.824236, -2.34609, -2.16067, 0.759584, 2.33849, -0.12392, 0.248795, 0.0769186, -1.49489, 0.699122, 1.47191, 1.85524, 
-//  // distance : 0.834975
-// 1.84508, -1.57475, -0.771146, -2.13532, -2.11418, 0.710033, 2.33904, -0.165651, 0.292093, 0.0720454, -1.54657, 0.828797, 1.4782, 1.80159, 
-//  // distance : 0.778868
-// 1.93982, -1.53853, -0.733273, -1.91646, -2.07348, 0.688523, 2.33985, -0.201064, 0.342286, 0.0728541, -1.60237, 0.953716, 1.48057, 1.74296, 
-//  // distance : 0.754351
-// 2.02247, -1.49706, -0.705544, -1.68878, -2.04497, 0.681718, 2.33247, -0.224104, 0.401821, 0.0720446, -1.65717, 1.07746, 1.47468, 1.67865, 
- // distance : 0.762463
-
-// 2.10085, -1.45043, -0.684826, -1.44756, -2.03038, 0.686014, 2.31258, -0.236162, 0.472911, 0.0717868, -1.70595, 1.19792, 1.45845, 1.61077, 
- // distance : 0.82212
-
-// 2.18154, -1.39057, -0.673757, -1.17815, -2.02867, 0.703286, 2.27391, -0.239152, 0.55708, 0.0749066, -1.745, 1.31533, 1.43125, 1.54129;
- // distance : 1.07191
-// 2.28836, -1.292, -0.684402, -0.825018, -2.05174, 0.744845, 2.19023, -0.238986, 0.655853, 0.0894607, -1.77037, 1.42673, 1.39508, 1.47327;

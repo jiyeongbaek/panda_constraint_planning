@@ -15,6 +15,10 @@ find_package(catkin REQUIRED COMPONENTS
   moveit_visual_tools
   moveit_resources
   trajectory_msgs
+  trac_ik_lib
+  kdl_parser
+  tf2
+  tf2_ros
 )
 
 LIST( APPEND CMAKE_MODULE_PATH "$ENV{HOME}/cmake" )
@@ -62,17 +66,17 @@ link_directories(${Boost_LIBRARY_DIR})
 set(SOURCES
   src/base/jy_ProjectedStateSpace.cpp
   src/planner/newPRM.cpp
-  src/planner/No_RRT.cpp
+  src/planner/newRRT.cpp
   src/planner/NoRandomSampleSpace.cpp
-  src/panda_model_updater.cpp)
+  src/kinematics/panda_model_updater.cpp)
 
 add_library(${PROJECT_NAME}_lib
   ${SOURCES}
 )
 
-add_executable(test src/main.cpp)
+add_executable(${PROJECT_NAME} src/main.cpp)
 
-target_link_libraries (test              
+target_link_libraries (${PROJECT_NAME}              
                       ${catkin_LIBRARIES}          
                        ${OMPL_LIBRARIES}
                        ${Boost_LIBRARIES}
@@ -92,3 +96,13 @@ target_link_libraries (path_smoothing_test
                        ${PROJECT_NAME}_lib)
 
 
+add_executable(planning_scene src/planning_scene_test.cpp)
+
+target_link_libraries (planning_scene              
+                      ${catkin_LIBRARIES}          
+                      ${Boost_LIBRARIES}
+                      fcl
+                      ${PROJECT_NAME}_lib)
+                       
+                       
+                       

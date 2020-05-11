@@ -17,8 +17,8 @@
 #include <ompl/base/spaces/constraint/TangentBundleStateSpace.h>
 #include <ompl/base/spaces/constraint/ProjectedStateSpace.h>
 
-#include <constraint_planner/KinematicChain.h>
-#include <constraint_planner/panda_model_updater.h>
+#include <constraint_planner/kinematics/KinematicChain.h>
+#include <constraint_planner/kinematics/panda_model_updater.h>
 
 #include <ctime>
 
