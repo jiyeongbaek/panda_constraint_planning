@@ -102,7 +102,22 @@
         "glbeginendadapter": "cpp",
         "renderinfo": "cpp",
         "polytope": "cpp",
-        "program": "cpp"
+        "program": "cpp",
+        "state": "cpp",
+        "*.txx": "cpp",
+        "config": "cpp",
+        "cullsettings": "cpp",
+        "math": "cpp",
+        "nodevisitor": "cpp",
+        "plane": "cpp",
+        "stateattribute": "cpp",
+        "uniform": "cpp",
+        "vec2d": "cpp",
+        "vec2f": "cpp",
+        "vec3d": "cpp",
+        "vec3f": "cpp",
+        "vec4d": "cpp",
+        "vec4f": "cpp"
     },
     "ros.distro": "melodic",
     "python.autoComplete.extraPaths": [

@@ -28,7 +28,8 @@
                 "/home/jiyeong/catkin_ws/src/2_social/social_vrep_interface/include",
                 "/home/jiyeong/catkin_ws/src/3_dual_constraint_planning/stefan_planning/include",
                 "/home/jiyeong/catkin_ws/src/3_dual_constraint_planning/test_vrep/include",
-                "/usr/include"
+                "/usr/include",
+                "/usr/include/eigen3"
             ],
             "name": "Linux",
             "intelliSenseMode": "gcc-x64",

@@ -1,8 +1,6 @@
 #pragma once
 
 #include <Eigen/Dense>
-// #include <Eigen/Core>
-#include "model.h"
 
 #include <trac_ik/trac_ik.hpp>
 #include <kdl/chainiksolverpos_nr_jl.hpp>
@@ -16,12 +14,17 @@ using namespace RigidBodyDynamics;
 typedef Eigen::Matrix<double, 7, 1> Vector7d;
 typedef Eigen::Matrix<double, 6, 1> Vector6d;
 
-struct FrankaModelUpdater
+#define deg2rad(ang) ((ang)*M_PI / 180.0)
+#define rad2deg(ang) ((ang)*180 / M_PI)
+class FrankaModelUpdater
 {
-    // franka::Model model_;
-    franka::RobotState state_;
-
-    Eigen::Matrix<double, 7, 1> &q_;                //q
+public:
+    FrankaModelUpdater();
+    void PandaRBDLModel();
+    Affine3d getTransform(const Vector7d &q);
+    Matrix<double, 6, 7> getJacobian(const Vector7d &q);
+    Matrix<double, 7, 7> getMassMatrix(const Vector7d &q);
+    Matrix<double, 7, 1> getGravity(const Vector7d &q);
     
     std::shared_ptr<Model> rbdl_model_;
 
@@ -52,30 +55,8 @@ struct FrankaModelUpdater
     bool target_updated_{false};            ///< it is used to check whether any other action is on going excep the idle control
     // -- arm parameters
 
-    FrankaModelUpdater(Eigen::Matrix<double, 7, 1> &vrep_q) :
-     q_(vrep_q)
-    {
-        PandaRBDLModel();
-    }
-
-    void PandaRBDLModel();
-    void updatemodel();
-    Affine3d getTransform(const Vector7d &q);
-    Matrix<double, 6, 7> getJacobian(const Vector7d &q);
-    Matrix<double, 7, 7> getMassMatrix(const Vector7d &q);
-    Matrix<double, 7, 1> getGravity(const Vector7d &q);
-    void setTorque(const Eigen::Matrix<double, 7, 1> &torque_command, bool idle_control = false);
-    void setPosition(const Matrix<double, 7, 1> &position_command, bool idle_control = false);
-
-    void setInitialTransform();
-    void setRobotState(franka::RobotState state);
-
-
-public:
     double delta_tau_max_{0.05};
 };
-
-
 
 class panda_ik
 {
@@ -84,7 +65,6 @@ public:
     bool solve(VectorXd start, Affine3d target, Eigen::Ref<Eigen::VectorXd> solution);
     Eigen::VectorXd getRandomConfig();
     bool randomSolve(Affine3d target, Eigen::Ref<Eigen::VectorXd> solution);
-
 
 private:
     std::string chain_start{"panda_link0"};

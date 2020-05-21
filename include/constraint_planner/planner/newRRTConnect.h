@@ -1,44 +1,30 @@
 #pragma once
 
-#include <ompl/datastructures/NearestNeighbors.h>
-#include <ompl/geometric/planners/PlannerIncludes.h>
-#include <ompl/base/ConstrainedSpaceInformation.h>
+#include "ompl/datastructures/NearestNeighbors.h"
+#include "ompl/geometric/planners/PlannerIncludes.h"
 
-#include <ompl/base/spaces/RealVectorStateSpace.h>
-#include <ompl/base/goals/GoalState.h>
 #include <ompl/base/spaces/constraint/ConstrainedStateSpace.h>
 #include <constraint_planner/kinematics/KinematicChain.h>
-
 #include <constraint_planner/kinematics/panda_model_updater.h>
+
+namespace ob = ompl::base;
 namespace ompl
 {
     namespace geometric
     {
-        /** \brief Rapidly-exploring Random Trees */
-        class newRRT : public base::Planner
+        class newRRTConnect : public base::Planner
         {
         public:
             /** \brief Constructor */
-            newRRT(const base::SpaceInformationPtr &si, bool addIntermediateStates = false);
+            newRRTConnect(const base::SpaceInformationPtr &si, bool addIntermediateStates = false);
 
-            ~newRRT() override;
+            ~newRRTConnect() override;
 
             void getPlannerData(base::PlannerData &data) const override;
 
             base::PlannerStatus solve(const base::PlannerTerminationCondition &ptc) override;
 
             void clear() override;
-
-            void setGoalBias(double goalBias)
-            {
-                goalBias_ = goalBias;
-            }
-
-            /** \brief Get the goal bias the planner is using */
-            double getGoalBias() const
-            {
-                return goalBias_;
-            }
 
             /** \brief Return true if the intermediate states generated along motions are to be added to the tree itself
              */
@@ -74,38 +60,57 @@ namespace ompl
             template <template <typename T> class NN>
             void setNearestNeighbors()
             {
-                if (nn_ && nn_->size() != 0)
+                if ((tStart_ && tStart_->size() != 0) || (tGoal_ && tGoal_->size() != 0))
                     OMPL_WARN("Calling setNearestNeighbors will clear all states.");
                 clear();
-                nn_ = std::make_shared<NN<Motion *>>();
+                tStart_ = std::make_shared<NN<Motion *>>();
+                tGoal_ = std::make_shared<NN<Motion *>>();
                 setup();
             }
 
             void setup() override;
+            bool isSatisfied(const ob::State *st) const;
             bool isSatisfied(const ob::State *st, double *distance) const;
 
-        protected:
-            /** \brief Representation of a motion
 
-                This only contains pointers to parent motions as we
-                only need to go backwards in the tree. */
+        protected:
+            /** \brief Representation of a motion */
             class Motion
             {
             public:
                 Motion() = default;
 
-                /** \brief Constructor that allocates memory for the state */
                 Motion(const base::SpaceInformationPtr &si) : state(si->allocState())
                 {
                 }
 
                 ~Motion() = default;
 
-                /** \brief The state contained by the motion */
+                const base::State *root{nullptr};
                 base::State *state{nullptr};
-
-                /** \brief The parent motion in the exploration tree */
                 Motion *parent{nullptr};
+            };
+
+            /** \brief A nearest-neighbor datastructure representing a tree of motions */
+            typedef std::shared_ptr<NearestNeighbors<Motion *>> TreeData;
+
+            /** \brief Information attached to growing a tree of motions (used internally) */
+            struct TreeGrowingInfo
+            {
+                base::State *xstate;
+                Motion *xmotion;
+                bool start;
+            };
+
+            /** \brief The state of the tree after an attempt to extend it */
+            enum GrowState
+            {
+                /// no progress has been made
+                TRAPPED,
+                /// progress has been made towards the randomly sampled state
+                ADVANCED,
+                /// the randomly sampled state was reached
+                REACHED
             };
 
             /** \brief Free the memory allocated by this planner */
@@ -117,15 +122,17 @@ namespace ompl
                 return si_->distance(a->state, b->state);
             }
 
+            /** \brief Grow a tree towards a random state */
+            GrowState growTree(TreeData &tree, TreeGrowingInfo &tgi, Motion *rmotion);
+
             /** \brief State sampler */
             base::StateSamplerPtr sampler_;
 
-            /** \brief A nearest-neighbors datastructure containing the tree of motions */
-            std::shared_ptr<NearestNeighbors<Motion *>> nn_;
+            /** \brief The start tree */
+            TreeData tStart_;
 
-            /** \brief The fraction of time the goal is picked as the state to expand towards (if such a state is
-             * available) */
-            double goalBias_{.05};
+            /** \brief The goal tree */
+            TreeData tGoal_;
 
             /** \brief The maximum length of a motion to be added to a tree */
             double maxDistance_{0.};
@@ -136,11 +143,16 @@ namespace ompl
             /** \brief The random number generator */
             RNG rng_;
 
-            /** \brief The most recent goal motion.  Used for PlannerData computation */
-            Motion *lastGoalMotion_{nullptr};
+            /** \brief The pair of states in each tree connected during planning.  Used for PlannerData computation */
+            std::pair<base::State *, base::State *> connectionPoint_;
 
-            std::shared_ptr<FrankaModelUpdater> panda_arm;
+            /** \brief Distance between the nearest pair of start tree and goal tree nodes. */
+            double distanceBetweenTrees_;
+
             grasping_point grp;
+            std::shared_ptr<FrankaModelUpdater> panda_arm;
+            
         };
-    } // namespace geometric
-} // namespace ompl
+    }
+}
+

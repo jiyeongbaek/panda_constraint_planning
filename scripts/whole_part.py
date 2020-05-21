@@ -11,45 +11,19 @@ class SceneObject():
         self.assembly = "assembly"
         self.assembly_pose = geometry_msgs.msg.PoseStamped()
         self.assembly_pose.header.frame_id="base"
+
+
+        # 1st-3rd start position / closed chain
+        # self.assembly_pose.pose.position.x = 1.15
+        # self.assembly_pose.pose.position.y = -0.1
+        # self.assembly_pose.pose.position.z = 1.0 #0.601
         # self.assembly_pose.pose.orientation.w = 1.0
 
-        # #STATE 1
-        self.assembly_pose.pose.position.x = 1.0
-        self.assembly_pose.pose.position.y = 0.0 
-        self.assembly_pose.pose.position.z = 0.72 #0.601
-        self.assembly_pose.pose.orientation.x = 0
-        self.assembly_pose.pose.orientation.y = 0
-        self.assembly_pose.pose.orientation.z = 0.258819
-        self.assembly_pose.pose.orientation.w = 0.965926
-
-        #STATE 2
-        # self.assembly_pose.pose.position.x = 0.965529
-        # self.assembly_pose.pose.position.y = 0.0510316
-        # self.assembly_pose.pose.position.z = 0.654535
-        # self.assembly_pose.pose.orientation.x = 0.366184
-        # self.assembly_pose.pose.orientation.y = 0.111416
-        # self.assembly_pose.pose.orientation.z = 0.112839
-        # self.assembly_pose.pose.orientation.w = 0.916932
-
-        #STATE 3
-        # self.assembly_pose.pose.position.x = 0.966875
-        # self.assembly_pose.pose.position.y = 0.0554544
-        # self.assembly_pose.pose.position.z =0.648861
-        # self.assembly_pose.pose.orientation.x = 0.395828
-        # self.assembly_pose.pose.orientation.y = 0.120436
-        # self.assembly_pose.pose.orientation.z = 0.0988886
-        # self.assembly_pose.pose.orientation.w = 0.905006
-
-
-        # self.assembly_pose.pose.position.x = 1
-        # self.assembly_pose.pose.position.y = 0.18
-        # self.assembly_pose.pose.position.z =0.72
-        # self.assembly_pose.pose.orientation.x = 0.675359
-        # self.assembly_pose.pose.orientation.y = 0.0192997
-        # self.assembly_pose.pose.orientation.z = 0.0176849
-        # self.assembly_pose.pose.orientation.w = 0.737025
-
-
-        # TEST MODE
+        # start position / chain u
+        self.assembly_pose.pose.position.x = 1.20 #1.15
+        self.assembly_pose.pose.position.y = -0.3
+        self.assembly_pose.pose.position.z = 0.751 #0.601
+        self.assembly_pose.pose.orientation.w = 1.0
+        
         self.list = {self.assembly : self.assembly_pose}
      

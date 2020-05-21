@@ -12,7 +12,6 @@ void jy_ProjectedStateSampler::sampleUniform(ob::State *state)
     ob::WrapperStateSampler::sampleUniform(state);
     constraint_->project(state);
     // space_->enforceBounds(state);
-    // std::cout << "constraint ? " << constraint_->isSatisfied(state) << std::endl;
 }
 
 void jy_ProjectedStateSampler::sampleUniformNear(ob::State *state, const ob::State *near, const double distance)

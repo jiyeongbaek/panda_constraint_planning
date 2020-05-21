@@ -29,26 +29,44 @@ class MoveGroupPlanner():
     def __init__(self):
         ### MoveIt! 
         moveit_commander.roscpp_initialize(sys.argv)
+        br = tf.TransformBroadcaster()
     
+
+        #rospy.init_node('move_group_planner',
+        #                anonymous=True)
+ 
         self.robot = moveit_commander.RobotCommander()
         self.scene = moveit_commander.PlanningSceneInterface()
 
-        self.group = moveit_commander.MoveGroupCommander("panda_arms")
-        self.group_left = moveit_commander.MoveGroupCommander("panda_left")
-        self.group_right = moveit_commander.MoveGroupCommander("panda_right")
+        self.group_1st = moveit_commander.MoveGroupCommander("panda_1")
+        self.group_2nd = moveit_commander.MoveGroupCommander("panda_2")
+        self.group_3rd = moveit_commander.MoveGroupCommander("panda_3")
+        self.group_list = [self.group_1st, self.group_2nd, self.group_3rd]
+        self.group_chain = moveit_commander.MoveGroupCommander("panda_closed_chain")
+        self.group_chairup = moveit_commander.MoveGroupCommander("panda_chair_up")
+        self.hand_1st = moveit_commander.MoveGroupCommander("hand_1")
+        self.hand_2nd = moveit_commander.MoveGroupCommander("hand_2")
+        self.hand_3rd = moveit_commander.MoveGroupCommander("hand_3")
+        self.hand_list = [self.hand_1st, self.hand_2nd, self.hand_3rd]
         
-        self.hand_left = moveit_commander.MoveGroupCommander("hand_left")
-        self.hand_right = moveit_commander.MoveGroupCommander("hand_right")
         self.display_trajectory_publisher = rospy.Publisher('/move_group/display_planned_path',
                                                     moveit_msgs.msg.DisplayTrajectory,
                                                     queue_size=20)
 
         # We can get the name of the reference frame for this robot:
-        self.planning_frame = self.group.get_planning_frame()
+        self.planning_frame = self.group_1st.get_planning_frame()
         print ("============ Reference frame: %s" % self.planning_frame)
 
         # We can also print the name of the end-effector link for this group:
-        self.eef_link = self.group.get_end_effector_link()
+        self.eef_link = self.group_1st.get_end_effector_link()
+        print ("============ End effector: %s" % self.eef_link)
+
+        # We can get the name of the reference frame for this robot:
+        self.planning_frame = self.group_3rd.get_planning_frame()
+        print ("============ Reference frame: %s" % self.planning_frame)
+
+        # We can also print the name of the end-effector link for this group:
+        self.eef_link = self.group_3rd.get_end_effector_link()
         print ("============ End effector: %s" % self.eef_link)
 
         # We can get a list of all the groups in the robot:
@@ -58,92 +76,112 @@ class MoveGroupPlanner():
         rospy.sleep(1)
         self.stefan = SceneObject()
 
+        self.scene.remove_attached_object(self.group_1st.get_end_effector_link())
+        self.scene.remove_attached_object(self.group_3rd.get_end_effector_link())
         self.scene.remove_world_object()
-        self.scene.remove_attached_object(self.group.get_end_effector_link())
 
-        # for key, value in self.stefan.list.items():
-        #     self.scene.add_mesh(key, value, self.stefan_dir + key + ".stl")
-        # rospy.sleep(1)
-        
         ### Franka Collision
         self.set_collision_behavior = rospy.ServiceProxy(
             'franka_control/set_force_torque_collision_behavior',
             franka_control.srv.SetForceTorqueCollisionBehavior)
-        # self.set_collision_behavior.wait_for_service()
+        #self.set_collision_behavior.wait_for_service()
 
         self.active_controllers = []
+
+        self.listener = tf.TransformListener()
+        self.tr = TransformerROS()
 
 
     # geometry_msgs.msg.Pose() or self.group.get_current_joint_values()
     def plan(self, goal, arm_name):
-        if (arm_name == 'panda_arms'):
-            self.group.set_max_velocity_scaling_factor = 0.6
-            self.group.set_max_acceleration_scaling_factor = 0.4
-            self.group.set_start_state_to_current_state()
-            trajectory = self.group.plan(goal)
-        return trajectory
+        if (arm_name == '1st'):
+            self.group_1st.set_max_velocity_scaling_factor = 0.6
+            self.group_1st.set_max_acceleration_scaling_factor = 0.4
+            self.group_1st.set_start_state_to_current_state()
+            trajectory = self.group_1st.plan(goal)
+            self.group_1st.go()
+        if (arm_name == '3rd'):
+            self.group_3rd.set_max_velocity_scaling_factor = 0.6
+            self.group_3rd.set_max_acceleration_scaling_factor = 0.4
+            self.group_3rd.set_start_state_to_current_state()
+            trajectory = self.group_3rd.plan(goal) 
+        if (arm_name == '2nd'):
+            self.group_2nd.set_max_velocity_scaling_factor = 0.6
+            self.group_2nd.set_max_acceleration_scaling_factor = 0.4
+            self.group_2nd.set_start_state_to_current_state()
+            trajectory = self.group_2nd.plan(goal)        
+        
     
-    # def plan_cartesian_target(self):
-    #     pose_goal = geometry_msgs.msg.Pose()
-    #     pose_goal.orientation = geometry_msgs.msg.Quaternion(
-    #         *tf_conversions.transformations.quaternion_from_euler(math.radians(90), math.radians(90), math.radians(0)))
-    #     pose_goal.position.x =  0.5429
-    #     pose_goal.position.y = 0.05
-    #     pose_goal.position.z = 0.6 + 0.30
+    def plan_cartesian_target(self):
+        pose_goal = geometry_msgs.msg.Pose()
+        pose_goal.orientation = geometry_msgs.msg.Quaternion(
+            *tf_conversions.transformations.quaternion_from_euler(math.radians(90), math.radians(90), math.radians(0)))
+        pose_goal.position.x =  0.5429
+        pose_goal.position.y = 0.05
+        pose_goal.position.z = 0.6 + 0.30
 
-    #     trajectory = self.group_left.plan(pose_goal)
-    #     return trajectory
+        trajectory = self.group_1st.plan(pose_goal)
+        return trajectory
 
-    def initial_pose(self):
-        joint_goal = self.group.get_current_joint_values()
-        joint_goal[6] = pi/4
-        joint_goal[13] = pi/4
-        self.group.plan(joint_goal)
-        self.group.go()
-        
-    def plan_joint_target(self, joint_goal, arm_name='panda_arms'):
+    def initial_pose(self, arm="all"):
+        joint_goal = [0, -0.785, 0, -1.571, 0, 1.571, 0.785]
+        if (arm == "1st"):
+            self.group_1st.plan(joint_goal)
+            self.group_1st.go()
+        elif (arm == "2nd"):
+            self.group_2nd.plan(joint_goal)
+            self.group_2nd.go()
+        elif (arm == "3rd"):
+            self.group_3rd.plan(joint_goal)
+            self.group_3rd.go()
+        else :
+            for group in self.group_list:
+                group.plan(joint_goal)
+                group.go()
+
+
+    def plan_joint_target(self, joint_goal, arm_name='panda_closed_chain'):
         if (len(joint_goal) == 14):
-            self.group.plan(joint_goal)
-            self.group.go()
+            if (arm_name=='panda_chair_up'):
+                self.group_chairup.plan(joint_goal)
+                self.group_chairup.go()
+            else:
+                self.group_chain.plan(joint_goal)
+                self.group_chain.go()
 
-        elif (arm_name=='left'):
-            self.group_left.plan(joint_goal)
-            self.group_left.go()
-        elif ( arm_name == 'right'):
-            self.group_right.plan(joint_goal)
-            self.group_right.go()
-
-
-
-
-    def gripper_open(self, arm):
-        joint_goal = self.hand_left.get_current_joint_values()
-        joint_goal[0] = 0.04
-        joint_goal[1] = 0.04
-        if (arm == "left"):
-            self.hand_left.plan(joint_goal)
-            print("============ OPEN LEFT GRIPPER")
-            self.hand_left.go()
-        else :
-            self.hand_right.plan(joint_goal)
-            print("============ OPEN RIGHT GRIPPER")
-            self.hand_right.go()
+        elif (arm_name=='1st'):
+            self.group_1st.plan(joint_goal)
+            self.group_1st.go()
         
-
-    def gripper_close(self, arm):
-        joint_goal = self.hand_left.get_current_joint_values()
-        joint_goal[0] = 0.03
-        joint_goal[1] = 0.03
-        if (arm == "left"):
-            plan = self.hand_left.plan(joint_goal)
-            if plan.joint_trajectory.points:
-                self.hand_left.go()
-                print("CLOSE LEFT GRIPPER")
+       
+    def gripper_open(self, arm="all"):
+        joint_goal = self.hand_1st.get_current_joint_values()
+        joint_goal[0] = 0.038
+        joint_goal[1] = 0.038
+        if (arm == "1st"):
+            self.hand_1st.plan(joint_goal)
+            print("OPEN 1ST GRIPPER")
+            self.hand_1st.go()
+        elif (arm == "3rd"):
+            self.hand_3rd.plan(joint_goal)
+            print("OPEN 3RD GRIPPER")
+            self.hand_3rd.go()
+        elif (arm == "2nd"):
+            self.hand_2nd.plan(joint_goal)
+            print("OPEN 2ND GRIPPER")
+            self.hand_2nd.go()
         else :
-            plan = self.hand_right.plan(joint_goal)
-            if plan.joint_trajectory.points:
-                self.hand_right.go()
-                print("CLOSE RIGHT GRIPPER")
+            for hand in self.hand_list:
+                hand.plan(joint_goal)
+                hand.go()
+
+
+    def gripper_close(self):
+        joint_goal = self.hand_1st.get_current_joint_values()
+        joint_goal[0] = 0.0
+        joint_goal[1] = 0.0
+        trajectory = self.hand_1st.plan(joint_goal)
+        return trajectory
 
     def display_trajectory(self, plan):
         self.display_trajectory = moveit_msgs.msg.DisplayTrajectory()

@@ -421,7 +421,7 @@ class KinematicChainValidityChecker : public ompl::base::StateValidityChecker //
 public:
     PandaCollisionCheck collision_checker;
     shapes::ShapeConstPtr shape_ptr;
-    Affine3d obj_Lgrasp, Lgrasp_obj;
+    Affine3d obj_Sgrasp, Lgrasp_obj;
     KinematicChainValidityChecker(const ompl::base::SpaceInformationPtr &si) : ompl::base::StateValidityChecker(si)
     {
         shapes::Mesh* stefan = shapes::createMeshFromResource("file:///home/jiyeong/catkin_ws/src/1_assembly/grasping_point/STEFAN/stl/assembly_fcl2.stl");
@@ -430,24 +430,25 @@ public:
         Vector3d z_offset(0, 0, -0.109);
 
         Quaterniond q_Lgrasp(0.48089 , 0.518406, -0.518406, 0.48089);
-        obj_Lgrasp.linear() = Quaterniond(0.48089 , 0.518406, -0.518406, 0.48089).toRotationMatrix();
-        obj_Lgrasp.translation() = Vector3d(-0.417291983962059, 0.385170965965183, 0.189059236695616) + obj_Lgrasp.linear() * z_offset;
+        obj_Sgrasp.linear() = Quaterniond(0.48089 , 0.518406, -0.518406, 0.48089).toRotationMatrix();
+        obj_Sgrasp.translation() = Vector3d(-0.417291983962059, 0.385170965965183, 0.189059236695616) + obj_Sgrasp.linear() * z_offset;
 
-        Lgrasp_obj = obj_Lgrasp.inverse();
+        Lgrasp_obj = obj_Sgrasp.inverse();
 
     }
 
     bool isValid(const ompl::base::State *state) const override
     {
-        const KinematicChainSpace *space = si_->getStateSpace()->as<KinematicChainSpace>();
         const auto *s = state->as<KinematicChainSpace::StateType>();
+        // auto &&s = state->as<ompl::base::ConstrainedStateSpace::StateType>()->getState()->as<KinematicChainSpace::StateType>();
+
         // const auto *s = state->as<ompl::base::RealVectorStateSpace::StateType>();
         
-        return isValidImpl(space, s);
+        return isValidImpl(s);
     }
 
 protected:
-    bool isValidImpl(const KinematicChainSpace *space, const KinematicChainSpace::StateType *s) const
+    bool isValidImpl(const KinematicChainSpace::StateType *s) const
     {
         robot_state::RobotState state1(collision_checker.robot_model_);
         for (int i = 0; i < 14; i++)
@@ -507,126 +508,3 @@ protected:
         return res.collision;
     }
 };
-
-// MoveIt!
-#include <moveit/robot_model_loader/robot_model_loader.h>
-#include <moveit/planning_scene/planning_scene.h>
-
-#include <moveit/kinematic_constraints/utils.h>
-
-
-bool stateFeasibilityTestExample(const robot_state::RobotState& kinematic_state, bool verbose)
-{
-  const double* joint_values = kinematic_state.getJointPositions("panda_joint1");
-  return (joint_values[0] > 0.0);
-}
-
-
-int main(int argc, char** argv)
-{
-  ros::init(argc, argv, "panda_arm_kinematics");
-  ros::AsyncSpinner spinner(1);
-  spinner.start();
-  std::size_t count = 0;
-  // BEGIN_TUTORIAL
-  //
-  // Setup
-  // ^^^^^
-  //
-  // The :planning_scene:`PlanningScene` class can be easily setup and
-  // configured using a :moveit_core:`RobotModel` or a URDF and
-  // SRDF. This is, however, not the recommended way to instantiate a
-  // PlanningScene. The :planning_scene_monitor:`PlanningSceneMonitor`
-  // is the recommended method to create and maintain the current
-  // planning scene (and is discussed in detail in the next tutorial)
-  // using data from the robot's joints and the sensors on the robot. In
-  // this tutorial, we will instantiate a PlanningScene class directly,
-  // but this method of instantiation is only intended for illustration.
-
-robot_model_ = moveit::core::loadTestingRobotModel("dual_panda");
-    robot_model_ok_ = static_cast<bool>(robot_model_);
-    acm_.reset(new collision_detection::AllowedCollisionMatrix(robot_model_->getLinkModelNames(), false));
-
-  robot_model_loader::RobotModelLoader robot_model_loader("dual_panda");
-  robot_model::RobotModelPtr kinematic_model = robot_model_loader.getModel();
-  planning_scene::PlanningScene planning_scene(kinematic_model);
-  robot_state::RobotState& current_state = planning_scene.getCurrentStateNonConst();
-
-  collision_detection::CollisionRequest collision_request;
-  collision_detection::CollisionResult collision_result;
-
-
-  planning_scene.checkSelfCollision(collision_request, collision_result);
-  ROS_INFO_STREAM("Test 1: Current state is " << (collision_result.collision ? "in" : "not in") << " self collision");
-
-
-  // Getting Contact Information
-  // ~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  //
-  // First, manually set the Panda arm to a position where we know
-  // internal (self) collisions do happen. Note that this state is now
-  // actually outside the joint limits of the Panda, which we can also
-  // check for directly.
-
-  std::vector<double> joint_values = { 0.0, 0.0, 0.0, -2.9, 0.0, 1.4, 0.0 };
-  const robot_model::JointModelGroup* panda_left = current_state.getJointModelGroup("panda_left");
-  const robot_model::JointModelGroup* panda_right = current_state.getJointModelGroup("panda_right");
-  current_state.setJointGroupPositions(joint_model_group, joint_values);
-
-  // Now, we can get contact information for any collisions that might
-  // have happened at a given configuration of the Panda arm. We can ask
-  // for contact information by filling in the appropriate field in the
-  // collision request and specifying the maximum number of contacts to
-  // be returned as a large number.
-
-  collision_request.contacts = true;
-  collision_request.max_contacts = 1000;
-
-  //
-
-  collision_detection::CollisionResult::ContactMap::const_iterator it;
-  for (it = collision_result.contacts.begin(); it != collision_result.contacts.end(); ++it)
-  {
-    ROS_INFO("Contact between: %s and %s", it->first.first.c_str(), it->first.second.c_str());
-  }
-
-
-  collision_detection::AllowedCollisionMatrix acm = planning_scene.getAllowedCollisionMatrix();
-  robot_state::RobotState copied_state = planning_scene.getCurrentState();
-
-  collision_detection::CollisionResult::ContactMap::const_iterator it2;
-  for (it2 = collision_result.contacts.begin(); it2 != collision_result.contacts.end(); ++it2)
-  {
-    acm.setEntry(it2->first.first, it2->first.second, true);
-  }
-
-  // Full Collision Checking
-  // ~~~~~~~~~~~~~~~~~~~~~~~
-  //
-  // While we have been checking for self-collisions, we can use the
-  // checkCollision functions instead which will check for both
-  // self-collisions and for collisions with the environment (which is
-  // currently empty).  This is the set of collision checking
-  // functions that you will use most often in a planner. Note that
-  // collision checks with the environment will use the padded version
-  // of the robot. Padding helps in keeping the robot further away
-  // from obstacles in the environment.*/
-  collision_result.clear();
-  planning_scene.checkCollision(collision_request, collision_result, copied_state, acm);
-  ROS_INFO_STREAM("Test 7: Current state is " << (collision_result.collision ? "in" : "not in") << " self collision");
-
-  // Constraint Checking
-  // ^^^^^^^^^^^^^^^^^^^
-  //
-  // The PlanningScene class also includes easy to use function calls
-  // for checking constraints. The constraints can be of two types:
-  // (a) constraints chosen from the
-  // :kinematic_constraints:`KinematicConstraint` set:
-  // i.e. :kinematic_constraints:`JointConstraint`,
-  // :kinematic_constraints:`PositionConstraint`,
-  // :kinematic_constraints:`OrientationConstraint` and
-  // :kinematic_constraints:`VisibilityConstraint` and (b) user
-  // defined constraints specified through a callback. We will first
-  // look at an example with a simple KinematicConstraint.
-
-}

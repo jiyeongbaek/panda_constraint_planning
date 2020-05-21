@@ -28,20 +28,20 @@ namespace ompl
 
         /** \brief The number of nearest neighbors to consider by
             default in the construction of the newPRM roadmap */
-        static const unsigned int DEFAULT_NEAREST_NEIGHBORS = 5;
+        static const unsigned int DEFAULT_NEAREST_NEIGHBORS = 15;
     } // namespace magic
 } // namespace ompl
 
 ompl::geometric::newPRM::newPRM(const base::SpaceInformationPtr &si, bool starStrategy)
     : base::Planner(si, "newPRM"), starStrategy_(starStrategy), stateProperty_(boost::get(vertex_state_t(), g_)), totalConnectionAttemptsProperty_(boost::get(vertex_total_connection_attempts_t(), g_)), successfulConnectionAttemptsProperty_(boost::get(vertex_successful_connection_attempts_t(), g_)), weightProperty_(boost::get(boost::edge_weight, g_)), disjointSets_(boost::get(boost::vertex_rank, g_), boost::get(boost::vertex_predecessor, g_))
 {
-    u_eigen.resize(14);
-    v_eigen.resize(14);
-    panda_arm = std::make_shared<FrankaModelUpdater>(q_temp);
+    panda_arm = std::make_shared<FrankaModelUpdater>();
     specs_.recognizedGoal = base::GOAL_SAMPLEABLE_REGION;
     specs_.approximateSolutions = true;
     specs_.optimizingPaths = true;
     specs_.multithreaded = true;
+    panda_arm = std::make_shared<FrankaModelUpdater>();
+    panda_ik_solver = std::make_shared<panda_ik>();
     if (!starStrategy_)
         Planner::declareParam<unsigned int>("max_nearest_neighbors", this, &newPRM::setMaxNearestNeighbors,
                                             std::string("8:1000"));
@@ -233,6 +233,11 @@ void ompl::geometric::newPRM::expandRoadmap(const base::PlannerTerminationCondit
                 // add the vertex to the nearest neighbors data structure
                 // std::cout << "add vertex " << std::endl;
                 nn_->add(m);
+                // if (isSatisfied(stateProperty_[m]))
+                // {
+                //     OMPL_INFORM(" ADD NEW GOAL STATE ");
+                //     goalM_.push_back(m);
+                // }
                 v = m;
             }
 
@@ -281,13 +286,6 @@ void ompl::geometric::newPRM::growRoadmap(const base::PlannerTerminationConditio
             unsigned int attempts = 0;
             do
             {
-                /* 0.7 확률로 start - goal 사이에서 sampling, 0.3 확률로 random */
-                // if (rng_.uniform01() < 0.6) // 0.85
-                //     found = sampler_->sampleNear(workState, mid, distance);
-                //     // found = sampler_->jy_sampleNear(workState, start_state, goal_state);
-                // else
-                //     found = sampler_->sample(workState);
-
                 found = sampler_->sample(workState);
                 attempts++;
 
@@ -312,12 +310,56 @@ void ompl::geometric::newPRM::checkForSolution(const base::PlannerTerminationCon
                 goalM_.push_back(addMilestone(si_->cloneState(st)));
         }
 
+        // base::State *new_goal = si_->allocState();
+        // if (sampleIKgoal(new_goal))
+        // {
+        //     goalM_.push_back(addMilestone(si_->cloneState(new_goal)));
+        //     // OMPL_INFORM("ADD NEW GOAL STATE");
+        // }
+
         // Check for a solution
         addedNewSolution_ = maybeConstructSolution(startM_, goalM_, solution);
         // Sleep for 1ms
         if (!addedNewSolution_)
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
+}
+// bool ompl::geometric::newPRM::sampleIKgoal(ob::State *result)
+bool ompl::geometric::newPRM::sampleIKgoal(ob::State *state)
+{
+    Eigen::Map<Eigen::VectorXd> &sol = *state->as<ob::ConstrainedStateSpace::StateType>();
+
+    int stefan_tries = 500;
+    while (--stefan_tries)
+    {
+        Affine3d base_obj;
+        base_obj.linear() = AngleAxisd(rng_.uniformReal(M_PI / 2 - deg2rad(2), M_PI / 2 + deg2rad(2)), Eigen::Vector3d::UnitX()) *
+                            AngleAxisd(0, Eigen::Vector3d::UnitY()) *
+                            AngleAxisd(0, Eigen::Vector3d::UnitZ()).toRotationMatrix();
+
+        // base_obj.translation() = Vector3d(rng_.uniformReal(0.8, 1.1), rng_.uniformReal(-0.1, 0.1), rng_.uniformReal(0.7, 0.8));
+        base_obj.translation() = Vector3d(rng_.uniformReal(0.98, 1.12), rng_.uniformReal(0.16, 0.20), rng_.uniformReal(0.7, 0.72));
+        Affine3d target_left = grp.base_serve.inverse() * base_obj * grp.obj_Sgrasp;
+        Affine3d target_right = grp.base_main.inverse() * base_obj * grp.obj_Mgrasp;
+
+        int tries = 50;
+        while (--tries)
+        {
+            bool left, right;
+            left = panda_ik_solver->randomSolve(target_left, sol.segment<7>(0));
+            right = panda_ik_solver->randomSolve(target_right, sol.segment<7>(7));
+            if (left && right)
+            {
+                if (si_->isValid(state))
+                {
+                    return true;
+                }
+            }
+            else
+                break;
+        }
+    }
+    return false;
 }
 
 bool ompl::geometric::newPRM::maybeConstructSolution(const std::vector<Vertex> &starts, const std::vector<Vertex> &goals,
@@ -435,10 +477,9 @@ ompl::base::PlannerStatus ompl::geometric::newPRM::solve(const base::PlannerTerm
 
     // std::vector<Vertex> motions;
     // nn_->list(motions);
-    // for (auto &motion : motions)
-    // {
-    //     si_->printState(stateProperty_[motion]);
-    // }
+
+    // for (auto &vertex : goalM_)
+        // si_->printState(stateProperty_[vertex]);
 
     if (sol)
     {
@@ -486,15 +527,12 @@ void ompl::geometric::newPRM::constructRoadmap(const base::PlannerTerminationCon
         // call growRoadmap() twice as long for every call of expandRoadmap()
         if (grow)
         {
-            // std::cout << "grow roadmap" << std::endl;
-
             growRoadmap(base::plannerOrTerminationCondition(
                             ptc, base::timedPlannerTerminationCondition(2.0 * magic::ROADMAP_BUILD_TIME)),
                         xstates[0], mid, distance);
         }
         else
         {
-            // std::cout << "expand roadmap" << std::endl;
             expandRoadmap(base::plannerOrTerminationCondition(
                               ptc, base::timedPlannerTerminationCondition(magic::ROADMAP_BUILD_TIME)),
                           xstates);
@@ -536,6 +574,7 @@ ompl::geometric::newPRM::Vertex ompl::geometric::newPRM::addMilestone(base::Stat
         }
 
     nn_->add(m);
+
     return m;
 }
 
@@ -698,36 +737,56 @@ void ompl::geometric::newPRM::getPlannerData(base::PlannerData &data) const
 
 ompl::base::Cost ompl::geometric::newPRM::costHeuristic(Vertex u, Vertex v) const
 {
-    // auto u_ = stateProperty_[u];
-    // auto v_ = stateProperty_[v]; //access to the internal base::state at each Vertex.
+    auto u_ = stateProperty_[u];
+    auto v_ = stateProperty_[v]; //access to the internal base::state at each Vertex.
 
-    // auto *prev_ = u_->as<ompl::base::ConstrainedStateSpace::StateType>()->getState()->as<KinematicChainSpace::StateType>();
-    // auto *current_ = v_->as<ompl::base::ConstrainedStateSpace::StateType>()->getState()->as<KinematicChainSpace::StateType>();
+    auto *prev_ = u_->as<ompl::base::ConstrainedStateSpace::StateType>()->getState()->as<KinematicChainSpace::StateType>();
+    auto *current_ = v_->as<ompl::base::ConstrainedStateSpace::StateType>()->getState()->as<KinematicChainSpace::StateType>();
 
-    // Eigen::VectorXd prev =  Eigen::Map<const Eigen::VectorXd>(prev_->values, 14);
-    // Eigen::VectorXd current =  Eigen::Map<const Eigen::VectorXd>(current_->values, 14);
+    Eigen::Matrix<double, 7, 1> prev;
+    Eigen::Matrix<double, 7, 1> current;
 
-    // Eigen::Affine3d u_trans = panda_arm->getTransform(prev.head<7>());
-    // Eigen::Affine3d v_trans = panda_arm->getTransform(current.head<7>());
-    // Eigen::Quaterniond u_quat(u_trans.linear());
-    // Eigen::Quaterniond v_quat(v_trans.linear());
-    // double d = (u_trans.translation() - v_trans.translation() ).norm();
-    // double r = u_quat.angularDistance(v_quat);
-    // ompl::base::Cost cost(d+r);
-    // std::cout << d << " " << r << std::endl;
-    // return cost;
+    for (int i = 0; i < 7; i++)
+    {
+        prev[i] = prev_->values[i];
+        current[i] = current_->values[i];
+    }
 
-    return opt_->motionCostHeuristic(stateProperty_[u], stateProperty_[v]);
+    Eigen::Affine3d u_trans = panda_arm->getTransform(prev);
+    Eigen::Affine3d v_trans = panda_arm->getTransform(current);
+    Eigen::Quaterniond u_quat(u_trans.linear());
+    Eigen::Quaterniond v_quat(v_trans.linear());
+    double d = (u_trans.translation() - v_trans.translation() ).norm();
+    double r = u_quat.angularDistance(v_quat);
+    ompl::base::Cost cost(d+r);
+    return cost;
+
+    // return opt_->motionCostHeuristic(stateProperty_[u], stateProperty_[v]);
 }
 
+bool ompl::geometric::newPRM::isSatisfied(const ob::State *st) const
+{
+    auto *s = st->as<ompl::base::ConstrainedStateSpace::StateType>()->getState()->as<KinematicChainSpace::StateType>();
+    Eigen::Matrix<double, 7, 1> joint;
+    for (int i = 0; i < 7; i++)
+        joint[i] = s->values[i];
+    Eigen::Affine3d right_Rgrasp = panda_arm->getTransform(joint);
 
+    Eigen::Affine3d base_obj = grp.base_main * right_Rgrasp * grp.Sgrp_obj;
+    Eigen::Vector3d rpy = base_obj.linear().eulerAngles(0, 1, 2);
 
+    // double yaw = rpy[0];
+    // double pitch = rpy[1]; //0
+    double roll = rpy[0]; // 90
+    double distance = abs(rad2deg(roll) - 90);
 
-// auto *start_state = pdef_->getStartState(0)->as<base::ConstrainedStateSpace::StateType>()->getState()->as<KinematicChainSpace::StateType>();
-// auto *goal_state = goal->as<base::GoalState>()->getState()->as<base::ConstrainedStateSpace::StateType>()->getState()->as<KinematicChainSpace::StateType>();
-// Eigen::VectorXd distance(14);
-// for (int i = 0; i < 14; i++)
-// {
-//     mid->as<base::ConstrainedStateSpace::StateType>()->getState()->as<KinematicChainSpace::StateType>()->values[i] = (start_state->values[i] + goal_state->values[i] ) /2.0;
-//     distance[i] = goal_state->values[i] - start_state->values[i];
-// }
+    double yaw = abs(rad2deg(rpy[2]));
+    std::cout << distance << " " << yaw << std::endl;
+    if (distance < 5) // && yaw < 20)
+    {
+        std::cout << rpy.transpose() << std::endl;
+        return true;
+    }
+
+    return false;
+}

@@ -185,6 +185,9 @@ namespace ompl
             {
                 return nn_;
             }
+            bool isSatisfied(const ob::State *st) const;
+            bool sampleIKgoal(ob::State *result);
+            // bool sampleIKgoal(Eigen::Ref<Eigen::VectorXd> goal);
 
         protected:
             /** \brief Free all the memory allocated by the planner */
@@ -334,12 +337,13 @@ namespace ompl
             base::Cost bestCost_{std::numeric_limits<double>::quiet_NaN()};
 
 
-            std::shared_ptr<FrankaModelUpdater> panda_arm;
             Eigen::Matrix<double, 7, 1> q_temp;
             Eigen::VectorXd u_eigen, v_eigen;
             // base::jy_ConstrainedSpaceInformationPtr si_;
 
-
+            grasping_point grp;
+            std::shared_ptr<FrankaModelUpdater> panda_arm;
+            std::shared_ptr<panda_ik> panda_ik_solver;
         };
     }
 }

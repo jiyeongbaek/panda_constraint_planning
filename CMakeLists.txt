@@ -65,9 +65,12 @@ link_directories(${Boost_LIBRARY_DIR})
 
 set(SOURCES
   src/base/jy_ProjectedStateSpace.cpp
+  src/base/jy_GoalLazySamples.cpp
   src/planner/newPRM.cpp
+  src/planner/newRRTConnect.cpp
   src/planner/newRRT.cpp
-  src/planner/NoRandomSampleSpace.cpp
+  # src/planner/NoRandomSampleSpace.cpp
+  src/planner/GoalVisitor.hpp
   src/kinematics/panda_model_updater.cpp)
 
 add_library(${PROJECT_NAME}_lib
@@ -105,4 +108,8 @@ target_link_libraries (planning_scene
                       ${PROJECT_NAME}_lib)
                        
                        
-                       
+add_executable(rigidbody src/RigidBodyPlanningWithIK.cpp)
+
+target_link_libraries(rigidbody
+                      ${catkin_LIBRARIES}          
+                      ${OMPL_LIBRARIES})

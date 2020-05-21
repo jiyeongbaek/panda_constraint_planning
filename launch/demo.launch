@@ -3,11 +3,10 @@
     <param name="single_robot_description" command="$(find xacro)/xacro.py '$(find franka_description)/robots/panda_arm_hand.urdf.xacro'" />
     <include file="$(find social_moveit_config)/launch/planning_context.launch"/>
     <arg name="debug" default="false" />
-        
-    <node name="constraint_planner" pkg="constraint_planner" type="constraint_planner" output="screen" > 
-        <arg unless="$(arg debug)" name="launch_prefix" value="" />
-        <arg     if="$(arg debug)" name="launch_prefix" value="xterm -e gdb --args" />
-<!-- <rosparam command="load" file="$(find social_moveit_config)/config/kinematics.yaml"/>     -->
-    </node>
+    <node name="constraint_planner" pkg="constraint_planner" type="constraint_planner" output="screen" launch-prefix="gdb -ex run --args" if="$(arg debug)" /> 
+    <node name="constraint_planner" pkg="constraint_planner" type="constraint_planner" output="screen" if="$(eval debug == false)" /> 
+
 </launch>
+
+<!-- launch-prefix="gdb -ex run -args " -->
 

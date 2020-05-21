@@ -1,22 +1,19 @@
-#include <constraint_planner/planner/newRRT.h>
 
+
+#include <constraint_planner/planner/newRRT.h>
 #include <limits>
-#include "ompl/base/goals/GoalSampleableRegion.h"
-#include "ompl/tools/config/SelfConfig.h"
+#include <ompl/base/goals/GoalSampleableRegion.h>
+#include <ompl/tools/config/SelfConfig.h>
 
 ompl::geometric::newRRT::newRRT(const base::SpaceInformationPtr &si, bool addIntermediateStates)
-    : base::Planner(si, addIntermediateStates ? "newRRTintermediate" : "newRRT")
+  : base::Planner(si, addIntermediateStates ? "newRRTintermediate" : "newRRT")
 {
     specs_.approximateSolutions = true;
     specs_.directed = true;
 
     Planner::declareParam<double>("range", this, &newRRT::setRange, &newRRT::getRange, "0.:1.:10000.");
     Planner::declareParam<double>("goal_bias", this, &newRRT::setGoalBias, &newRRT::getGoalBias, "0.:.05:1.");
-    Planner::declareParam<bool>("intermediate_states", this, &newRRT::setIntermediateStates, &newRRT::getIntermediateStates,
-                                "0,1");
 
-    addIntermediateStates_ = addIntermediateStates;
-    panda_arm = std::make_shared<FrankaModelUpdater>();
 }
 
 ompl::geometric::newRRT::~newRRT()
@@ -39,7 +36,7 @@ void ompl::geometric::newRRT::setup()
     Planner::setup();
     tools::SelfConfig sc(si_, getName());
     sc.configurePlannerRange(maxDistance_);
-    maxDistance_ = 9.;
+    // maxDistance_ = 1.5;
     if (!nn_)
         nn_.reset(tools::SelfConfig::getDefaultNearestNeighbors<Motion *>(this));
     nn_->setDistanceFunction([this](const Motion *a, const Motion *b) { return distanceFunction(a, b); });
@@ -66,6 +63,9 @@ ompl::base::PlannerStatus ompl::geometric::newRRT::solve(const base::PlannerTerm
     base::Goal *goal = pdef_->getGoal().get();
     auto *goal_s = dynamic_cast<base::GoalSampleableRegion *>(goal);
 
+    // auto *start_state = pdef_->getStartState(0)->as<base::ConstrainedStateSpace::StateType>()->getState()->as<KinematicChainSpace::StateType>();
+    // auto *goal_state = goal->as<base::GoalState>()->getState()->as<base::ConstrainedStateSpace::StateType>()->getState()->as<KinematicChainSpace::StateType>();
+
     while (const base::State *st = pis_.nextStart())
     {
         auto *motion = new Motion(si_);
@@ -90,95 +90,60 @@ ompl::base::PlannerStatus ompl::geometric::newRRT::solve(const base::PlannerTerm
     auto *rmotion = new Motion(si_);
     base::State *rstate = rmotion->state;
     base::State *xstate = si_->allocState();
-
+    
+    // base::State *mid = si_->allocState();
+    // Eigen::VectorXd start_state_ =  Eigen::Map<const Eigen::VectorXd>(start_state->values, 14);
+    // // Eigen::VectorXd goal_state_ =  Eigen::Map<const Eigen::VectorXd>(goal_state->values, 14);
+    // for (int i = 0; i < 14; i++)      
+    //     mid->as<base::ConstrainedStateSpace::StateType>()->getState()->as<KinematicChainSpace::StateType>()->values[i] = (start_state_[i] + goal_state->values[i] ) /2.0;
+    
+    // double state_norm = (goal_state_ - start_state_).norm();
+    // double delta = state_norm / 7;
     while (!ptc)
-    {
+    {  
         /* sample random state (with goal biasing) */
-        bool trapped = false;
         if ((goal_s != nullptr) && rng_.uniform01() < goalBias_ && goal_s->canSample())
         {
             goal_s->sampleGoal(rstate);
-            std::cout << "sampling goal" << std::endl;
-            si_->printState(rstate);
-            
         }
-
         else
             sampler_->sampleUniform(rstate);
 
         /* find closest state in the tree */
         Motion *nmotion = nn_->nearest(rmotion);
         base::State *dstate = rstate;
-
+        
         /* find state to add */
         double d = si_->distance(nmotion->state, rstate);
-        // std::cout << d << " " << maxDistance_ << std::endl;
-
-        // if (d > maxDistance_)
-        // {
-        //     si_->getStateSpace()->interpolate(nmotion->state, rstate, maxDistance_ / d, xstate);
-        //     if (si_->equalStates(nmotion->state, xstate))
-        //     {
-        //         // trapped = true;
-        //         std::cout << "trapped" << std::endl;
-        //         dstate = rstate;
-        //     }
-        //     else
-        //     {
-        //         dstate = xstate;
-        //     }
-        //     // std::cout << "d is bigger than maxDistance" << std::endl;
-        //     // si_->printState(dstate);
-        // }
-
-        if (!trapped)
+        if (d > maxDistance_)
         {
-            if (si_->checkMotion(nmotion->state, dstate))
+            si_->getStateSpace()->interpolate(nmotion->state, rstate, maxDistance_ / d, xstate);
+            // si_->printState(xstate, std::cout);
+            dstate = xstate;
+        }
+
+        if (si_->checkMotion(nmotion->state, dstate))
+        {
+            // std::cout << "check motion" << std::endl;
+            Motion *motion = new Motion(si_);
+            // si_->copyState(motion->state, dstate);
+            motion->parent = nmotion;
+            nn_->add(motion);
+            nmotion = motion;
+            
+
+            double dist = 0.0;
+            bool sat = goal->isSatisfied(nmotion->state, &dist);
+            if (sat)
             {
-                std::cout << "check motion module" << std::endl;
-                si_->printState(dstate);
-                if (addIntermediateStates_)
-                {
-                    std::vector<base::State *> states;
-                    const unsigned int count = si_->getStateSpace()->validSegmentCount(nmotion->state, dstate);
-
-                    if (si_->getMotionStates(nmotion->state, dstate, states, count, true, true))
-                        si_->freeState(states[0]);
-
-                    for (std::size_t i = 1; i < states.size(); ++i)
-                    {
-                        Motion *motion = new Motion;
-                        motion->state = states[i];
-                        motion->parent = nmotion;
-                        nn_->add(motion);
-
-                        nmotion = motion;
-                    }
-                }
-                else
-                {
-                    Motion *motion = new Motion(si_);
-                    si_->copyState(motion->state, dstate);
-                    motion->parent = nmotion;
-                    nn_->add(motion);
-
-                    nmotion = motion;
-                }
-                si_->printState(nmotion->state);
-                double dist = 0.0;
-                bool sat = goal->isSatisfied(nmotion->state, &dist);
-                // bool sat = isSatisfied(nmotion->state, &dist);
-                if (sat)
-                {
-                    approxdif = dist;
-                    solution = nmotion;
-                    break;
-                }
-                if (dist < approxdif)
-                {
-                    approxdif = dist;
-                    approxsol = nmotion;
-                }
+                approxdif = dist;
+                solution = nmotion;
+                break;
+            }
+            if (dist < approxdif)
+            {
+                approxdif = dist;
+                approxsol = nmotion;
             }
         }
     }
@@ -217,36 +182,14 @@ ompl::base::PlannerStatus ompl::geometric::newRRT::solve(const base::PlannerTerm
     delete rmotion;
 
     OMPL_INFORM("%s: Created %u states", getName().c_str(), nn_->size());
-
+    // std::vector<Motion *> motions;
+    // nn_->list(motions);
+    // for (auto &motion : motions)
+    // {
+    //     si_->printState(motion->state);
+    // }
     return base::PlannerStatus(solved, approximate);
 }
-
-// bool ompl::geometric::newRRT::isSatisfied(const ob::State *st, double *distance) const
-// {
-//     auto *s = st->as<ompl::base::ConstrainedStateSpace::StateType>()->getState()->as<KinematicChainSpace::StateType>();
-//     Eigen::Matrix<double, 7, 1> joint;
-//     for (int i = 0; i < 7; i++)
-//         joint[i] = s->values[i];
-//     // std::cout << s->values[i] << std::endl;
-//     std::cout << joint.transpose() << std::endl;
-//     Eigen::Affine3d left_Lgrasp = panda_arm->getTransform(joint);
-
-//     Eigen::Affine3d base_obj = grp.base_serve * left_Lgrasp * grp.Lgrasp_obj;
-
-//     Eigen::Vector3d rpy = base_obj.linear().eulerAngles(0, 1, 2);
-//     double roll = rpy[0]; // 90
-//     *distance = abs(rad2deg(roll) - 90) + abs(rad2deg(rpy[2]));
-
-//     std::cout << *distance << std::endl;
-//     if (*distance < 10 ) 
-//     {
-//         return true;
-//     }
-
-//     return false;
-// }
-
-
 
 void ompl::geometric::newRRT::getPlannerData(base::PlannerData &data) const
 {

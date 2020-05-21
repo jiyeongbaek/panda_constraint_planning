@@ -1,6 +1,9 @@
 #include <constraint_planner/kinematics/panda_model_updater.h>
 
-// arm_arm_state__// arm_arm_state__
+FrankaModelUpdater::FrankaModelUpdater()
+{
+  PandaRBDLModel();
+}
 void FrankaModelUpdater::PandaRBDLModel()
 {
   rbdl_model_ = std::make_shared<Model>();
@@ -69,17 +72,6 @@ void FrankaModelUpdater::PandaRBDLModel()
   }
 }
 
-void FrankaModelUpdater::updatemodel()
-{
-  transform_ = getTransform(q_);
-
-  mass_matrix_ = getMassMatrix(q_);
-  gravity_ = getGravity(q_);
-  jacobian_ = getJacobian(q_);
-  position_ = transform_.translation();
-  rotation_ = transform_.linear();
-}
-
 Affine3d FrankaModelUpdater::getTransform(const Vector7d &q)
 {
   VectorXd q_temp_ = q;
@@ -135,16 +127,6 @@ Matrix<double, 7, 1> FrankaModelUpdater::getGravity(const Vector7d &q)
   return g_temp;
 }
 
-void FrankaModelUpdater::setInitialTransform()
-{
-  initial_transform_ = transform_;
-}
-
-void FrankaModelUpdater::setRobotState(franka::RobotState state)
-{
-  state_ = state;
-}
-
 panda_ik::panda_ik() : tracik_solver(chain_start, chain_end, "/single_robot_description")
 {
   KDL::JntArray ll, ul; //lower joint limits, upper joint limits
@@ -168,14 +150,13 @@ panda_ik::panda_ik() : tracik_solver(chain_start, chain_end, "/single_robot_desc
 
   lb_ = ll.data;
   ub_ = ul.data;
-  length = (ub_ - lb_) /2.;
+  length = (ub_ - lb_) / 2.;
 
   KDL::JntArray nominal(chain.getNrOfJoints());
   for (uint j = 0; j < nominal.data.size(); j++)
   {
     nominal(j) = (ll(j) + ul(j)) / 2.0;
   }
-
 }
 
 Eigen::VectorXd panda_ik::getRandomConfig()

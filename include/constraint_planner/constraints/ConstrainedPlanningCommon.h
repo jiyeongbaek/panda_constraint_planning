@@ -9,8 +9,8 @@
 #include <ompl/geometric/PathGeometric.h>
 
 #include <constraint_planner/constraints/ConstraintFunction.h>
-#include <constraint_planner/base/jy_ConstrainedSpaceInformation.h>
-
+#include <constraint_planner/base/jy_ConstrainedValidStateSampler.h>
+#include <ompl/base/ConstrainedSpaceInformation.h>
 #include <ompl/base/spaces/constraint/ConstrainedStateSpace.h>
 // #include <ompl/base/spaces/constraint/ProjectedStateSpace.h>
 #include <constraint_planner/base/jy_ProjectedStateSpace.h>
@@ -20,8 +20,10 @@
 #include <ompl/geometric/planners/prm/PRM.h>
 #include <constraint_planner/planner/newRRT.h>
 #include <constraint_planner/planner/newPRM.h>
+#include <constraint_planner/planner/newRRTConnect.h>
 #include <ompl/tools/benchmark/Benchmark.h>
-#include <ompl/base/goals/GoalLazySamples.h>
+// #include <ompl/base/goals/GoalLazySamples.h>
+#include <constraint_planner/base/jy_GoalLazySamples.h>
 
 #include <ompl/base/spaces/SE3StateSpace.h>
 namespace ob = ompl::base;
@@ -36,8 +38,10 @@ enum PLANNER_TYPE
     RRTConnect,
     PRM,
     newRRT,
-    newPRM
+    newPRM,
+    newRRTConnect
 };
+
 
 std::istream &operator>>(std::istream &in, enum PLANNER_TYPE &type)
 {
@@ -53,6 +57,8 @@ std::istream &operator>>(std::istream &in, enum PLANNER_TYPE &type)
         type = newRRT;
     else if (token == "newPRM")
         type = newPRM;
+    else if (token == "newRRTConnect")
+        type = newRRTConnect;
     else
         in.setstate(std::ios_base::failbit);
 
@@ -70,6 +76,7 @@ struct ConstrainedOptions
     double range;
 };
 
+
 class ConstrainedProblem
 {
 public:
@@ -78,33 +85,36 @@ public:
     {
         OMPL_INFORM("Using Projection-Based State Space!");
         css = std::make_shared<jy_ProjectedStateSpace>(space, constraint);
-        csi = std::make_shared<ob::jy_ConstrainedSpaceInformation>(css);
+        csi = std::make_shared<ob::ConstrainedSpaceInformation>(css);
         css->setup();
         ss = std::make_shared<og::SimpleSetup>(csi);
 
-        base_left.translation() = Vector3d(0, 0.3, 0.6);
-        base_right.translation() = Vector3d(0, -0.3, 0.6);
-        base_left.linear().setIdentity();
-        base_right.linear().setIdentity();
-        
-        grasping_point grp;
-        obj_Lgrasp = grp.obj_Lgrasp;
-        obj_Rgrasp = grp.obj_Rgrasp;
+        csi->setValidStateSamplerAllocator([](const ob::SpaceInformation *si) -> std::shared_ptr<ob::ValidStateSampler> {
+            return std::make_shared<jy_ConstrainedValidStateSampler>(si);
+        } ) ;
+
+        base_serve = grp.base_serve;
+        base_main = grp.base_main;
+        obj_Sgrasp = grp.obj_Sgrasp;
+        obj_Mgrasp = grp.obj_Mgrasp;
     }
+
+    
+
 
     /* . The distance between each point in the discrete geodesic is tuned by the "delta" parameter
          Valid step size for manifold traversal with delta*/
     void setConstrainedOptions()
     {
         // rrt 되는거
-        c_opt.delta = 0.1; //0.075
+        c_opt.delta = 0.07; //0.075
 
         c_opt.lambda = 2.0;
-        c_opt.tolerance1 = 0.007; //0.001
-        c_opt.tolerance2 = 0.08;  // 0.01;
-        c_opt.time = 60.;
+        c_opt.tolerance1 = 0.0015; //0.001
+        c_opt.tolerance2 = 0.01;  // 0.01;
+        c_opt.time = 40.;
         c_opt.tries = 200;
-        c_opt.range = 1.5;
+        // c_opt.range = 1.5;
 
         constraint->setTolerance(c_opt.tolerance1, c_opt.tolerance2);
         constraint->setMaxIterations(c_opt.tries);
@@ -113,16 +123,119 @@ public:
         css->setLambda(c_opt.lambda);
     }
 
-    void setStartAndGoalStates(const Eigen::Ref<const Eigen::VectorXd> &start,
-                               const Eigen::Ref<const Eigen::VectorXd> &goal)
+    void setStartAndGoalStates()
     {
         // Create start and goal states (poles of the sphere)
         ob::ScopedState<> sstart(css);
         ob::ScopedState<> sgoal(css);
 
-        sstart->as<ob::ConstrainedStateSpace::StateType>()->copy(start);
-        sgoal->as<ob::ConstrainedStateSpace::StateType>()->copy(goal);
+
+        sstart->as<ob::ConstrainedStateSpace::StateType>()->copy(grp.start);
+        sgoal->as<ob::ConstrainedStateSpace::StateType>()->copy(grp.goal);
+        std::cout << "init state   : " << grp.start.transpose() << std::endl;
+        std::cout << "target state : " << grp.goal.transpose() << std::endl;
+
         ss->setStartAndGoalStates(sstart, sgoal);
+        // ss->setStartState(sstart);
+    }
+
+    ob::PlannerStatus solveOnce(bool goalsampling, const std::string &name = "projection")
+    {
+        ss->setup();
+
+        ob::jy_GoalSamplingFn samplingFunction = [&](const ob::jy_GoalLazySamples *gls, ob::State *result) {
+            return sampleIKgoal(gls, result);
+        };
+
+        std::shared_ptr<ompl::base::jy_GoalLazySamples> goal;
+        if (goalsampling)
+        {
+            goal = std::make_shared<ompl::base::jy_GoalLazySamples>(ss->getSpaceInformation(), samplingFunction);
+            // goal->addState(ss->getGoal()->as<ob::GoalState>()->getState());
+            ss->setGoal(goal);
+        }
+        ob::PlannerStatus stat = ss->solve(c_opt.time);
+        dumpGraph("test");
+        if (stat)
+        {
+            ompl::geometric::PathGeometric path = ss->getSolutionPath();
+            // if (!path.check())
+            //     OMPL_WARN("Path fails check!");
+            if (stat == ob::PlannerStatus::APPROXIMATE_SOLUTION)
+                OMPL_WARN("Solution is approximate.");
+            path.printAsMatrix(std::cout);
+            path.interpolate();
+            std::ofstream pathfile("/home/jiyeong/catkin_ws/" + name + "_path.txt");
+            OMPL_INFORM("Interpolating path & Dumping path to `%s_path.txt`.", name.c_str());
+            path.printAsMatrix(pathfile);
+            pathfile.close();
+            std::cout << std::endl;
+        }
+        else
+            OMPL_WARN("No solution found.");
+
+        if (goalsampling)
+            goal->as<ob::jy_GoalLazySamples>()->stopSampling();
+
+        return stat;
+    }
+
+    void dumpGraph(const std::string &name)
+    {
+        ob::PlannerData data(csi);
+        pp->getPlannerData(data);
+
+        std::ofstream graphfile("/home/jiyeong/catkin_ws/" + name + "_path.graphml");
+        data.printGraphML(graphfile);
+        graphfile.close();
+
+        std::ofstream graphfile2("/home/jiyeong/catkin_ws/" + name + "_path.dot");
+        data.printGraphviz(graphfile2);
+        graphfile2.close();
+
+        OMPL_INFORM("Dumping planner graph to `%s_graph.graphml`.", name.c_str());
+    }
+
+    bool sampleIKgoal(const ob::jy_GoalLazySamples *gls, ob::State *result)
+    {
+        int stefan_tries = 500;
+        std::shared_ptr<panda_ik> panda_ik_solver = std::make_shared<panda_ik>();
+        while (--stefan_tries)
+        {
+            Affine3d base_obj;
+            // closed chain 
+            // base_obj.linear() = AngleAxisd(rng_.uniformReal(M_PI / 2 - deg2rad(2), M_PI / 2 + deg2rad(2)), Eigen::Vector3d::UnitX()) *
+            //                     AngleAxisd(0, Eigen::Vector3d::UnitY()) *
+            //                     AngleAxisd(0, Eigen::Vector3d::UnitZ()).toRotationMatrix();
+            // base_obj.translation() = Vector3d(1.15, 0.0, 1.0);
+
+            //chair up
+            base_obj.linear().setIdentity();
+            base_obj.translation() = Vector3d(1.15, -0.1, 1.0);
+
+            Affine3d target_serve = base_serve.inverse() * base_obj * obj_Sgrasp;
+            Affine3d target_main = base_main.inverse() * base_obj * obj_Mgrasp;
+            
+            Eigen::Map<Eigen::VectorXd> &sol = *result->as<ob::ConstrainedStateSpace::StateType>();
+            int tries = 50;
+            while (--tries)
+            {
+                // std::cout << tries << std::endl;
+                bool serve, main;
+                serve = panda_ik_solver->randomSolve(target_serve, sol.segment<7>(0));
+                main = panda_ik_solver->randomSolve(target_main, sol.segment<7>(7));
+                if (serve && main)
+                {
+                    if (gls->getSpaceInformation()->isValid(result))
+                    {
+                        return true;
+                    }
+                }
+                else
+                    break;
+            }
+        }
+        return false;
     }
 
     template <typename _T>
@@ -194,6 +307,9 @@ public:
         case newPRM:
             p = createPlanner<og::newPRM>();
             break;
+        case newRRTConnect:
+            p = createPlannerRange<og::newRRTConnect>();
+            break;
         }
         return p;
     }
@@ -203,126 +319,20 @@ public:
         pp = getPlanner(planner, projection);
         ss->setPlanner(pp);
     }
-    
-    ob::PlannerStatus solveOnce(bool output = false, const std::string &name = "projection")
-    {
-        ss->setup();
-        ob::GoalSamplingFn samplingFunction = [&](const ob::GoalLazySamples *gls, ob::State *result) {
-            return sampleIKgoal(gls, result);
-        };
-
-        std::shared_ptr<ompl::base::GoalLazySamples> goal;
-        goal = std::make_shared<ompl::base::GoalLazySamples>(ss->getSpaceInformation(), samplingFunction);
-        goal->addState(ss->getGoal()->as<ob::GoalState>()->getState());
-        ss->setGoal(goal);
-
-        ob::PlannerStatus stat = ss->solve(c_opt.time);
-
-        if (stat)
-        {
-            ompl::geometric::PathGeometric path = ss->getSolutionPath();
-            // if (!path.check())
-            //     OMPL_WARN("Path fails check!");
-            if (stat == ob::PlannerStatus::APPROXIMATE_SOLUTION)
-                OMPL_WARN("Solution is approximate.");
-            path.printAsMatrix(std::cout);
-            path.interpolate();
-            if (output)
-            {
-                // std::ofstream pathfile((boost::format("%1%_path.txt") % name).str()); //, std::ios::app);
-                std::ofstream pathfile("/home/jiyeong/catkin_ws/" + name + "_path.txt");
-                OMPL_INFORM("Interpolating path & Dumping path to `%s_path.txt`.", name.c_str());
-                path.printAsMatrix(pathfile);
-                pathfile.close();
-                std::cout << std::endl;
-                dumpGraph("test");
-            }
-        }
-        else
-            OMPL_WARN("No solution found.");
-
-        goal->as<ob::GoalLazySamples>()->stopSampling();
-        return stat;
-    }
-
-    void dumpGraph(const std::string &name)
-    {
-        OMPL_INFORM("Dumping planner graph to `%s_graph.graphml`.", name.c_str());
-        ob::PlannerData data(csi);
-        pp->getPlannerData(data);
-
-        std::ofstream graphfile((boost::format("%1%_graph.graphml") % name).str());
-        data.printGraphML(graphfile);
-        graphfile.close();
-
-        std::ofstream graphfile2((boost::format("%1%_graph.dot") % name).str());
-        data.printGraphviz(graphfile2);
-        graphfile2.close();
-    }
-
-    bool sampleIKgoal(const ob::GoalLazySamples *gls, ob::State *result)
-    {
-        auto sr = result->as<ob::ConstrainedStateSpace::StateType>()->as<KinematicChainSpace::StateType>();
-
-        int stefan_tries = 500;
-        while (--stefan_tries)
-        {
-            Affine3d base_obj;
-            
-            double yaw = rng_.uniformReal(-M_PI / 2, M_PI / 2);
-            base_obj.linear() = AngleAxisd(yaw, Eigen::Vector3d::UnitZ()) *
-                                AngleAxisd(0, Eigen::Vector3d::UnitY()) *
-                                AngleAxisd(M_PI/2, Eigen::Vector3d::UnitX()).toRotationMatrix();
-            base_obj.translation() = Vector3d(rng_.uniformReal(0.8, 1.1), rng_.uniformReal(-0.1, 0.1), rng_.uniformReal(0.7, 0.8));
-                
-
-            Affine3d target_left = base_left.inverse() * base_obj * obj_Lgrasp;
-            Affine3d target_right = base_right.inverse() * base_obj * obj_Rgrasp;
 
 
-            std::shared_ptr<panda_ik> panda_ik_solver = std::make_shared<panda_ik>();
-            // Eigen::VectorXd start;
-            // auto start_state = ss->getProblemDefinition()->getStartState(0);
-            // auto newstart = start_state->as<ob::ConstrainedStateSpace::StateType>()->getState()->as<KinematicChainSpace::StateType>();
-            // start = Eigen::Map<const Eigen::VectorXd>(newstart->values, 14);
-
-            // std::cout << base_obj.translation().transpose() << std::endl;
-            // std::cout << base_obj.linear() << std::endl;
-            // cout << target_left.translation().transpose() << endl;
-            // cout << target_right.translation().transpose() << endl;
-            Matrix<double, 14, 1> sol;
-            int tries = 50;
-            while (--tries)
-            {
-                // std::cout << tries << std::endl;
-                bool left, right;
-                left = panda_ik_solver->randomSolve(target_left, sol.segment<7>(0));
-                right = panda_ik_solver->randomSolve(target_right, sol.segment<7>(7));
-                if ( left && right)
-                {
-                    // Eigen::Map<Eigen::VectorXd>(sr->values, 14) = sol;
-                    for (int i = 0; i < 14; i++)
-                        result->as<ob::ConstrainedStateSpace::StateType>()->getState()->as<KinematicChainSpace::StateType>()->values[i] = sol[i];
-                    if (gls->getSpaceInformation()->isValid(result))
-                        return true;
-                }
-                else
-                    break;
-            }
-        }
-        return false;
-    }
     ob::StateSpacePtr space;
     ChainConstraintPtr constraint;
 
     ob::ConstrainedStateSpacePtr css;
-    ob::jy_ConstrainedSpaceInformationPtr csi;
+    // std::shared_ptr<jy_ConstrainedSpaceInformation> csi;
+    ob::ConstrainedSpaceInformationPtr csi;
     ob::PlannerPtr pp;
     og::SimpleSetupPtr ss;
 
     struct ConstrainedOptions c_opt;
-    Affine3d obj_Lgrasp, obj_Rgrasp, base_left, base_right;
-
+    Affine3d obj_Sgrasp, obj_Mgrasp, base_serve, base_main;
+    grasping_point grp;
 protected:
     ompl::RNG rng_;
 };

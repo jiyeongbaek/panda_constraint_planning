@@ -68,16 +68,24 @@ int main(int argc, char **argv)
     planning_scene = std::make_shared<planning_scene::PlanningScene>(robot_model);
     acm_ = std::make_shared<collision_detection::AllowedCollisionMatrix>(planning_scene->getAllowedCollisionMatrix());
 
-    std::vector<double> joint_values = {-1.6671076987319884, -1.4984785565179355, 1.5404192524883924, -2.388776541995507, -2.897203095390305, 3.280959665933266, -1.0941728565641882,
-                                        -0.10243983084379964, 0.2659588901612104, 0.4127700947518499, -1.3902073234890953, 0.06790555501862428, 1.5908404988928444, 2.0916124777614624};
-    robot_state::RobotState &current_state = planning_scene->getCurrentStateNonConst();
-    current_state.setJointGroupPositions(current_state.getJointModelGroup("panda_arms"), joint_values);
+    grasping_point grp;
+    std::vector<double> start_values;
+    start_values.resize(grp.start.size());
+    Eigen::VectorXd::Map(&start_values[0], grp.start.size()) = grp.start;
 
+    // for (std::vector<double>::const_iterator i = start_values.begin(); i != start_values.end(); ++i)
+    //     std::cout << *i << ' ';
+    // std::cout << std::endl;
+
+    robot_state::RobotState &current_state = planning_scene->getCurrentStateNonConst();
+    current_state.setJointGroupPositions("panda_closed_chain", start_values);
+    current_state.update();
     moveit_msgs::AttachedCollisionObject stefan_obj;
-    stefan_obj.link_name = "panda_left_hand";
-    stefan_obj.object.header.frame_id = "panda_left_hand";
+    stefan_obj.link_name = "panda_1_hand";
+    stefan_obj.object.header.frame_id = "panda_1_hand";
     stefan_obj.object.id = "stefan"; /* The id of the object is used to identify it. */
-    stefan_obj.touch_links = {"panda_left_hand", "panda_right_hand"};
+    // stefan_obj.touch_links = {"panda_1_hand", "panda_3_hand", "panda_1_leftfinger", "panda_1_rightfinger", "panda_3_leftfinger", "panda_3_rightfinger"};
+    stefan_obj.touch_links = {"hand_closed_chain"};
     shapes::Mesh *m = shapes::createMeshFromResource("file:///home/jiyeong/catkin_ws/src/1_assembly/grasping_point/STEFAN/stl/assembly.stl");
     shape_msgs::Mesh stefan_mesh;
     shapes::ShapeMsg stefan_mesh_msg;
@@ -85,18 +93,16 @@ int main(int argc, char **argv)
     stefan_mesh = boost::get<shape_msgs::Mesh>(stefan_mesh_msg);
 
     geometry_msgs::Pose stefan_pose;
-    grasping_point grp;
-    
-    Eigen::Quaterniond quat(grp.Lgrasp_obj.linear());
+
+    Eigen::Quaterniond quat(grp.Sgrp_obj.linear());
     stefan_pose.orientation.x = quat.x();
     stefan_pose.orientation.y = quat.y();
     stefan_pose.orientation.z = quat.z();
     stefan_pose.orientation.w = quat.w();
 
-    stefan_pose.position.x = grp.Lgrasp_obj.translation()[0];
-    stefan_pose.position.y = grp.Lgrasp_obj.translation()[1];
-    stefan_pose.position.z = grp.Lgrasp_obj.translation()[2];
-
+    stefan_pose.position.x = grp.Sgrp_obj.translation()[0];
+    stefan_pose.position.y = grp.Sgrp_obj.translation()[1];
+    stefan_pose.position.z = grp.Sgrp_obj.translation()[2];
 
     stefan_obj.object.meshes.push_back(stefan_mesh);
     stefan_obj.object.mesh_poses.push_back(stefan_pose);
@@ -105,16 +111,20 @@ int main(int argc, char **argv)
     moveit_scene.robot_state.attached_collision_objects.push_back(stefan_obj);
     moveit_scene.is_diff = true;
     planning_scene->processAttachedCollisionObjectMsg(stefan_obj);
-
-    acm_->setEntry("panda_left_hand", "stefan", true);
-    acm_->setEntry("panda_right_hand", "stefan", true);
-
+    // planning_scene->setPlanningSceneMsg(moveit_scene);
 
     namespace rvt = rviz_visual_tools;
     moveit_visual_tools::MoveItVisualTools visual_tools("base");
     // visual_tools.publishRobotState(planning_scene->getCurrentStateNonConst());
     visual_tools.trigger();
     ros::Publisher planning_scene_diff_publisher = node_handle.advertise<moveit_msgs::PlanningScene>("planning_scene", 1);
+
+    // Eigen::VectorXd goal(14);
+    // goal << 0.13614265126868016, 0.09662223193014147, 0.3278388708746476, -2.00318813464185, -1.4214994159193286, 1.1189714923485592, 1.333323955471636, -2.018540252606785, -1.2037968457686832, 1.878614919960051, -1.7676543575140573, -2.8498493257627495, 2.4899623791401906, 1.8398752601775505;
+    // robot_state::RobotState robot_state = planning_scene->getCurrentState();
+    // robot_state.setJointGroupPositions("panda_closed_chain", goal);
+    // robot_state.update();
+    // planning_scene->setCurrentState(robot_state);
     moveit_msgs::PlanningScene moveit_scene2;
     planning_scene->getPlanningSceneMsg(moveit_scene2);
 

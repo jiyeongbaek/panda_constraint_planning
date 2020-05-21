@@ -34,36 +34,37 @@ if __name__ == '__main__':
 
     sys.argv.append('joint_states:=/panda_dual/joint_states')
     rospy.init_node('ggg')
-    
-    mdp = MoveGroupPlanner()
-    mdp.initial_pose()
-    mdp.gripper_open("right")
-    mdp.gripper_open("left")
-    
-    quat = (0, 0, 0.258819, 0.965926)
-    euler = tf.transformations.euler_from_quaternion(quat)
-    print(math.degrees(euler[2]))
 
-    #STATE 1
-    # joint_goal = [-1.40951, -1.76259, 1.90521, -2.75986, 1.96589, 3.00976, 0.769984, 0.136339, 0.0771, 0.132456, -1.61833, 0.163069, 1.64452, 2.04722]
-    # joint_goal = [-2.56029, -0.96337, 1.25034, -1.24392, 0.933012, 1.34339, 1.33141, -0.260674, 0.494329, 0.109552, -1.73058, 1.25946, 1.46918, 1.61169]
-    joint_goal = [-1.6671076987319884, -1.4984785565179355, 1.5404192524883924, -2.388776541995507, -2.897203095390305, 3.280959665933266, -1.0941728565641882, -0.10245023002256344, 0.26594811616937525, 0.41290315245014864, -1.390080227072562, 0.06799447874492352, 1.5907921066040371, 2.0916256998720577]
-    mdp.plan_joint_target(joint_goal)
-    
+    mdp = MoveGroupPlanner()
+    mdp.gripper_open()
+    closed_chain = False
+    if closed_chain:
+        joint_goal = [0.8538476617343256, 0.7765987891970887, -1.38718092553011, -1.9162352330353676, 2.693557656819878, 2.209230516957901, -2.8518449420397336,
+                      2.4288973744080127, 0.2356190832102002, -2.6487764272706724, -2.409884568379378, 2.7754012268293335, 2.451555244441547, 2.786489214331766]
+        touch_links = mdp.robot.get_link_names(group='hand_closed_chain')
+        mdp.plan_joint_target(joint_goal)
+
+    else:
+        joint_goal = [1.7635811732933235, -1.4411345207422865, -1.964651184080014, -1.7905553615439762, 0.20378384311742412, 1.7390337027885823, -2.800300667744541, -
+                      2.507227794231461, -0.23624109784362163, 2.5633123073239905, -2.268388140289912, 0.24936065684482742, 2.4538909693928335, -0.9104041928398361]
+        touch_links = mdp.robot.get_link_names(group='hand_chair_up')
+        mdp.plan_joint_target(joint_goal, 'panda_chair_up')
+    rospy.sleep(2)
+    for i in joint_goal :
+        print(i * 180 / pi)
     for key, value in mdp.stefan.list.items():
-            mdp.scene.add_mesh(key, value, mdp.stefan.stefan_dir + key + ".stl")
-        
+            mdp.scene.add_mesh(
+                key, value, mdp.stefan.stefan_dir + key + ".stl")
+
     rospy.sleep(1)
-    touch_links = mdp.robot.get_link_names(group = 'panda_hands')
-    mdp.scene.attach_mesh(mdp.group_left.get_end_effector_link(), "assembly", touch_links= touch_links)
-    
+    mdp.scene.attach_mesh(mdp.group_3rd.get_end_effector_link(),
+                          "assembly", touch_links=touch_links)
+
     # mdp.gripper_close("left")
     # mdp.gripper_close("right")
     rospy.sleep(1)
-    
 
     # mdp.plan_right_joint()
     # rospy.sleep(3)
     # mdp.gripper_open("right")
     # mdp.gripper_open("left")
-
