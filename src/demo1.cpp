@@ -52,7 +52,7 @@
 using namespace std;
 unsigned int links = 14;
 
-void execute_path(std::string path_name, std::string planning_group, double total_time = 2.5)
+void execute_path(std::string path_name, std::string planning_group, double total_time = 3)
 {
     std::cout << path_name << std::endl;
 
@@ -94,23 +94,6 @@ void execute_path(std::string path_name, std::string planning_group, double tota
     move_group.execute(plan);
 }
 
-bool plannedPath()
-{
-    auto ss = std::make_shared<KinematicChainSpace>(links);
-    std::vector<enum PLANNER_TYPE> planners = {RRT, PRM, newRRT, newPRM, RRTConnect, newRRTConnect}; //RRTConnect
-    
-    auto constraint = std::make_shared<KinematicChainConstraint>(links);
-
-    ConstrainedProblem cp(ss, constraint); // define a simple problem to solve this constrained space
-    cp.setConstrainedOptions();
-    cp.ss->setStateValidityChecker(std::make_shared<KinematicChainValidityChecker>(cp.csi));
-    cp.setStartAndGoalStates();
-
-    enum PLANNER_TYPE planner = newPRM;
-    cp.setPlanner(planner);
-    return cp.solveOnce(true);
-}
-
 
 int main(int argc, char **argv)
 {
@@ -122,12 +105,6 @@ int main(int argc, char **argv)
     ros::WallDuration(1.0).sleep();
 
     grasping_point grp;
-    // execute_path("/home/jiyeong/catkin_ws/projection_path.txt", grp.planning_group);
-    if (plannedPath() )
-    {
-        ros::Publisher display_publisher = node_handle.advertise<moveit_msgs::DisplayTrajectory>("/move_group/display_planned_path", 5, true);
-        while (display_publisher.getNumSubscribers() == 0 && ros::ok())
-            ros::spinOnce();
-        execute_path("/home/jiyeong/catkin_ws/projection_path.txt", grp.planning_group);
-    }
+    execute_path("/home/jiyeong/catkin_ws/panda_chair_up.txt", "panda_chair_up");
+
 }

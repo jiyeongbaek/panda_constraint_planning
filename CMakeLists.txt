@@ -108,8 +108,16 @@ target_link_libraries (planning_scene
                       ${PROJECT_NAME}_lib)
                        
                        
-add_executable(rigidbody src/RigidBodyPlanningWithIK.cpp)
 
-target_link_libraries(rigidbody
-                      ${catkin_LIBRARIES}          
-                      ${OMPL_LIBRARIES})
+                 
+add_executable(demo1 src/demo1.cpp)
+add_executable(demo2 src/demo2.cpp)
+
+target_link_libraries(demo1
+${catkin_LIBRARIES}          
+${OMPL_LIBRARIES})
+
+
+target_link_libraries(demo2
+${catkin_LIBRARIES}          
+${OMPL_LIBRARIES})

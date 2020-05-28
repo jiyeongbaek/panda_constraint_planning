@@ -35,18 +35,21 @@ public:
         {
             sampler_->sampleUniform(state);
             // bool testbounds = testBounds(state);
-            // bool valid = si_->isValid(state);
+            // bool validity = si_->isValid(state);
             // bool constraint = constraint_->isSatisfied(state);
             // si_->printState(state);
-            // std::cout << testbounds << " " << valid << " " << constraint << std::endl;
+            // std::cout << testbounds << " " << validity << " " << constraint << std::endl;
             
         }
-        while (!testBounds(state) && !(valid = si_->isValid(state) && constraint_->isSatisfied(state)) && ++tries < 50);
+        while ( !(valid = testBounds(state) && constraint_->isSatisfied(state) && si_->isValid(state) ) && ++tries < 50);
         // if (valid)
         // {
-        //     // OMPL_INFORM("ADD VALID STATE");
-        //     return true;
+            // OMPL_INFORM("ADD VALID STATE");
+            // return true;
         // }
+        // else
+            // OMPL_WARN("INVALID STATE");
+        std::cout << valid << std::endl;
         return valid; 
     }
 

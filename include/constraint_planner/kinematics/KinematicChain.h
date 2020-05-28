@@ -168,7 +168,7 @@ public:
         acm_ = std::make_shared<collision_detection::AllowedCollisionMatrix>(planning_scene->getAllowedCollisionMatrix());
         robot_state::RobotState &current_state = planning_scene->getCurrentStateNonConst();
         
-        Eigen::VectorXd default_start(14);
+        Eigen::VectorXd default_start(7);
         default_start << 0, -0.785, 0, -1.571, 0, 1.571, 0.785;
         current_state.setJointGroupPositions("panda_1", default_start);
         current_state.setJointGroupPositions("panda_2", default_start);
@@ -187,7 +187,8 @@ public:
         stefan_obj.link_name = "panda_3_hand";
         stefan_obj.object.header.frame_id = "panda_3_hand";
         stefan_obj.object.id = "stefan"; 
-        // stefan_obj.touch_links = {"hand_closed_chain", "panda_1_leftfinger", "panda_1_rightfinger", "panda_3_leftfinger", "panda_3_rightfinger"};
+        std::vector<std::string> test = robot_model->getJointModelGroup(grp.hand_group)->getLinkModelNames();
+
         stefan_obj.touch_links = robot_model->getJointModelGroup(grp.hand_group)->getLinkModelNames();
         shapes::Mesh *m = shapes::createMeshFromResource("file:///home/jiyeong/catkin_ws/src/1_assembly/grasping_point/STEFAN/stl/assembly.stl");
         shape_msgs::Mesh stefan_mesh;
@@ -211,12 +212,62 @@ public:
         stefan_obj.object.mesh_poses.push_back(stefan_pose);
         stefan_obj.object.operation = stefan_obj.object.ADD;
 
-        moveit_scene.robot_state.attached_collision_objects.push_back(stefan_obj);
+        // moveit_scene.robot_state.attached_collision_objects.push_back(stefan_obj);
         moveit_scene.is_diff = true;
         planning_scene->processAttachedCollisionObjectMsg(stefan_obj);
+
+        moveit_msgs::AttachedCollisionObject attached_object;
+        attached_object.link_name = "base";
+        attached_object.object.header.frame_id = "base";
+        attached_object.object.id = "box";
+
+        geometry_msgs::Pose box_pose;
+        box_pose.orientation.w = 1.0;
+        box_pose.position.x = 0.8;
+        box_pose.position.z = 0.675;
+       
+        /* Define a box to be attached */
+        shape_msgs::SolidPrimitive primitive;
+        primitive.type = primitive.BOX;
+        primitive.dimensions.resize(3);
+        primitive.dimensions[0] = 1.2;
+        primitive.dimensions[1] = 0.5;
+        primitive.dimensions[2] = 0.15;
+        attached_object.object.operation = attached_object.object.ADD;
+        attached_object.object.primitives.push_back(primitive);
+        attached_object.object.primitive_poses.push_back(box_pose);
+        planning_scene->processAttachedCollisionObjectMsg(attached_object);
+
+        moveit_msgs::AttachedCollisionObject attached_object2;
+        attached_object2.link_name = "base";
+        attached_object2.object.header.frame_id = "base";
+        attached_object2.object.id = "box2";
+
+        geometry_msgs::Pose box_pose2;
+        box_pose2.orientation.w = 1.0;
+        box_pose2.position.x = 0.8;
+        box_pose2.position.y = -0.25;
+        box_pose2.position.z = 1.0;
+       
+        /* Define a box to be attached */
+        shape_msgs::SolidPrimitive primitive2;
+        primitive2.type = primitive2.BOX;
+        primitive2.dimensions.resize(3);
+        primitive2.dimensions[0] = 0.3;
+        primitive2.dimensions[1] = 0.1;
+        primitive2.dimensions[2] = 0.1;
+        attached_object2.object.operation = attached_object2.object.ADD;
+        attached_object2.object.primitives.push_back(primitive2);
+        attached_object2.object.primitive_poses.push_back(box_pose2);
+        // planning_scene->processAttachedCollisionObjectMsg(attached_object2);
     }
 
-    // bool isValid(const ompl::base::State *state) const override
+    bool isValid(const ob::State *state) const override
+    {
+        auto &&s = state->as<ob::ConstrainedStateSpace::StateType>()->getState()->as<KinematicChainSpace::StateType>();
+        return isValidImpl(s);
+    }
+
     protected:
     bool isValidImpl(const KinematicChainSpace::StateType *state) const 
     {
@@ -226,14 +277,14 @@ public:
         collision_detection::CollisionResult res;
         bool collision;
         res.clear();
-        {
-            std::lock_guard<std::mutex> lg(locker_);
+        // {
+            // std::lock_guard<std::mutex> lg(locker_);
             robot_state::RobotState robot_state = planning_scene->getCurrentState();
             robot_state.setJointGroupPositions(planning_group, state->values);
             robot_state.update();
             collision = planning_scene->isStateColliding(robot_state, grp.planning_group);
             // planning_scene->checkCollision(req, res, robot_state);
-        }
+        // }
 
         // return !res.collision;
         return !collision;

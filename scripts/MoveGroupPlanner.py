@@ -37,7 +37,7 @@ class MoveGroupPlanner():
  
         self.robot = moveit_commander.RobotCommander()
         self.scene = moveit_commander.PlanningSceneInterface()
-
+        self.plan_scene = moveit_commander.PlanningScene()
         self.group_1st = moveit_commander.MoveGroupCommander("panda_1")
         self.group_2nd = moveit_commander.MoveGroupCommander("panda_2")
         self.group_3rd = moveit_commander.MoveGroupCommander("panda_3")
@@ -76,9 +76,9 @@ class MoveGroupPlanner():
         rospy.sleep(1)
         self.stefan = SceneObject()
 
-        self.scene.remove_attached_object(self.group_1st.get_end_effector_link())
-        self.scene.remove_attached_object(self.group_3rd.get_end_effector_link())
-        self.scene.remove_world_object()
+        # self.scene.remove_attached_object(self.group_1st.get_end_effector_link())
+        # self.scene.remove_attached_object(self.group_3rd.get_end_effector_link())
+        # self.scene.remove_world_object()
 
         ### Franka Collision
         self.set_collision_behavior = rospy.ServiceProxy(
@@ -90,6 +90,23 @@ class MoveGroupPlanner():
 
         self.listener = tf.TransformListener()
         self.tr = TransformerROS()
+
+        box_pose = geometry_msgs.msg.PoseStamped()
+        box_pose.header.frame_id = "base"
+        box_pose.pose.orientation.w = 1.0
+        box_pose.pose.position.x = 0.8
+        box_pose.pose.position.z = 0.675        
+        
+        box_pose2 = geometry_msgs.msg.PoseStamped()
+        box_pose2.header.frame_id = "base"
+        box_pose2.pose.orientation.w = 1.0
+        box_pose2.pose.position.x = 0.8
+        box_pose2.pose.position.y = -0.25
+        box_pose2.pose.position.z = 1.0
+       
+        self.scene.add_box("box", box_pose, size = (1.2, 0.5, 0.15))
+        # self.scene.add_box("box2", box_pose2, size = (0.3, 0.08, 0.1))
+        
 
 
     # geometry_msgs.msg.Pose() or self.group.get_current_joint_values()
@@ -152,6 +169,9 @@ class MoveGroupPlanner():
         elif (arm_name=='1st'):
             self.group_1st.plan(joint_goal)
             self.group_1st.go()
+        elif (arm_name=='3rd'):
+            self.group_3rd.plan(joint_goal)
+            self.group_3rd.go()
         
        
     def gripper_open(self, arm="all"):

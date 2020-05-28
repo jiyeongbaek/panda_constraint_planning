@@ -81,11 +81,10 @@ int main(int argc, char **argv)
     current_state.setJointGroupPositions("panda_closed_chain", start_values);
     current_state.update();
     moveit_msgs::AttachedCollisionObject stefan_obj;
-    stefan_obj.link_name = "panda_1_hand";
-    stefan_obj.object.header.frame_id = "panda_1_hand";
+    stefan_obj.link_name = "panda_3_hand";
+    stefan_obj.object.header.frame_id = "panda_3_hand";
     stefan_obj.object.id = "stefan"; /* The id of the object is used to identify it. */
-    // stefan_obj.touch_links = {"panda_1_hand", "panda_3_hand", "panda_1_leftfinger", "panda_1_rightfinger", "panda_3_leftfinger", "panda_3_rightfinger"};
-    stefan_obj.touch_links = {"hand_closed_chain"};
+    stefan_obj.touch_links = robot_model->getJointModelGroup(grp.hand_group)->getLinkModelNames();
     shapes::Mesh *m = shapes::createMeshFromResource("file:///home/jiyeong/catkin_ws/src/1_assembly/grasping_point/STEFAN/stl/assembly.stl");
     shape_msgs::Mesh stefan_mesh;
     shapes::ShapeMsg stefan_mesh_msg;
@@ -94,15 +93,15 @@ int main(int argc, char **argv)
 
     geometry_msgs::Pose stefan_pose;
 
-    Eigen::Quaterniond quat(grp.Sgrp_obj.linear());
+    Eigen::Quaterniond quat(grp.Mgrp_obj.linear());
     stefan_pose.orientation.x = quat.x();
     stefan_pose.orientation.y = quat.y();
     stefan_pose.orientation.z = quat.z();
     stefan_pose.orientation.w = quat.w();
 
-    stefan_pose.position.x = grp.Sgrp_obj.translation()[0];
-    stefan_pose.position.y = grp.Sgrp_obj.translation()[1];
-    stefan_pose.position.z = grp.Sgrp_obj.translation()[2];
+    stefan_pose.position.x = grp.Mgrp_obj.translation()[0];
+    stefan_pose.position.y = grp.Mgrp_obj.translation()[1];
+    stefan_pose.position.z = grp.Mgrp_obj.translation()[2];
 
     stefan_obj.object.meshes.push_back(stefan_mesh);
     stefan_obj.object.mesh_poses.push_back(stefan_pose);
@@ -111,6 +110,29 @@ int main(int argc, char **argv)
     moveit_scene.robot_state.attached_collision_objects.push_back(stefan_obj);
     moveit_scene.is_diff = true;
     planning_scene->processAttachedCollisionObjectMsg(stefan_obj);
+
+    moveit_msgs::AttachedCollisionObject attached_object;
+    attached_object.link_name = "base";
+    attached_object.object.header.frame_id = "base";
+    attached_object.object.id = "box";
+
+    geometry_msgs::Pose box_pose;
+    box_pose.orientation.w = 1.0;
+    box_pose.position.x = 0.8;
+    box_pose.position.z = 0.675;
+
+    /* Define a box to be attached */
+    shape_msgs::SolidPrimitive primitive;
+    primitive.type = primitive.BOX;
+    primitive.dimensions.resize(3);
+    primitive.dimensions[0] = 1.2;
+    primitive.dimensions[1] = 0.5;
+    primitive.dimensions[2] = 0.15;
+    attached_object.object.operation = attached_object.object.ADD;
+    attached_object.object.primitives.push_back(primitive);
+    attached_object.object.primitive_poses.push_back(box_pose);
+    planning_scene->processAttachedCollisionObjectMsg(attached_object);
+
     // planning_scene->setPlanningSceneMsg(moveit_scene);
 
     namespace rvt = rviz_visual_tools;
@@ -119,10 +141,10 @@ int main(int argc, char **argv)
     visual_tools.trigger();
     ros::Publisher planning_scene_diff_publisher = node_handle.advertise<moveit_msgs::PlanningScene>("planning_scene", 1);
 
-    // Eigen::VectorXd goal(14);
-    // goal << 0.13614265126868016, 0.09662223193014147, 0.3278388708746476, -2.00318813464185, -1.4214994159193286, 1.1189714923485592, 1.333323955471636, -2.018540252606785, -1.2037968457686832, 1.878614919960051, -1.7676543575140573, -2.8498493257627495, 2.4899623791401906, 1.8398752601775505;
+    Eigen::VectorXd goal(14);
+    // goal <<-1.03481, 0.917356, -0.668407, -0.117773, 1.83023, 1.42452, 2.56145, -0.275923, 1.26458, 1.58845, -0.414796, -2.76651, 3.37671, 2.51461;
     // robot_state::RobotState robot_state = planning_scene->getCurrentState();
-    // robot_state.setJointGroupPositions("panda_closed_chain", goal);
+    // robot_state.setJointGroupPositions(grp.planning_group, goal);
     // robot_state.update();
     // planning_scene->setCurrentState(robot_state);
     moveit_msgs::PlanningScene moveit_scene2;

@@ -21,7 +21,7 @@ public:
                             0, -1, 0, 
                             0, 0, 1;
         
-        bool rotate_chair = false;
+        bool rotate_chair = true;
         base_main = base_3rd;
         if (rotate_chair)
         {

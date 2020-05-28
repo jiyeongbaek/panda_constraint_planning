@@ -219,6 +219,7 @@ namespace ompl
 
             /** Thread that checks for solution */
             void checkForSolution(const base::PlannerTerminationCondition &ptc, base::PathPtr &solution);
+            void updateStart(const base::PlannerTerminationCondition &ptc);
 
             /** \brief Check if there exists a solution, i.e., there exists a pair of milestones such that the first is
              * in \e start and the second is in \e goal, and the two milestones are in the same connected component. If

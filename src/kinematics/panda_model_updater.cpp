@@ -127,7 +127,7 @@ Matrix<double, 7, 1> FrankaModelUpdater::getGravity(const Vector7d &q)
   return g_temp;
 }
 
-panda_ik::panda_ik() : tracik_solver(chain_start, chain_end, "/single_robot_description")
+panda_ik::panda_ik() : tracik_solver(chain_start, chain_end, "/single_robot_description", TRAC_IK::SolveType::Manip1)
 {
   KDL::JntArray ll, ul; //lower joint limits, upper joint limits
 

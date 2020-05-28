@@ -14,16 +14,16 @@ class SceneObject():
 
 
         # 1st-3rd start position / closed chain
-        # self.assembly_pose.pose.position.x = 1.15
-        # self.assembly_pose.pose.position.y = -0.1
-        # self.assembly_pose.pose.position.z = 1.0 #0.601
-        # self.assembly_pose.pose.orientation.w = 1.0
+        self.assembly_pose.pose.position.x = 1.15
+        self.assembly_pose.pose.position.y = -0.1
+        self.assembly_pose.pose.position.z = 1.0 #0.601
+        self.assembly_pose.pose.orientation.w = 1.0
 
         # start position / chain u
-        self.assembly_pose.pose.position.x = 1.20 #1.15
-        self.assembly_pose.pose.position.y = -0.3
-        self.assembly_pose.pose.position.z = 0.751 #0.601
-        self.assembly_pose.pose.orientation.w = 1.0
+        # self.assembly_pose.pose.position.x = 1.20 #1.15
+        # self.assembly_pose.pose.position.y = -0.3
+        # self.assembly_pose.pose.position.z = 0.751 #0.601
+        # self.assembly_pose.pose.orientation.w = 1.0
         
         self.list = {self.assembly : self.assembly_pose}
      

@@ -309,7 +309,15 @@ void ompl::geometric::newPRM::checkForSolution(const base::PlannerTerminationCon
             if (st != nullptr)
                 goalM_.push_back(addMilestone(si_->cloneState(st)));
         }
-
+    
+       // Check for any new start states
+        // if (pdef_->getStartStateCount() > startM_.size())
+        // {
+        //     const base::State *st2 = pis_.nextStart();
+        //     if (st2 != nullptr)
+        //         startM_.push_back(addMilestone(si_->cloneState(st2)));
+        // }
+    
         // base::State *new_goal = si_->allocState();
         // if (sampleIKgoal(new_goal))
         // {
@@ -321,9 +329,10 @@ void ompl::geometric::newPRM::checkForSolution(const base::PlannerTerminationCon
         addedNewSolution_ = maybeConstructSolution(startM_, goalM_, solution);
         // Sleep for 1ms
         if (!addedNewSolution_)
-            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            std::this_thread::sleep_for(std::chrono::seconds(1));
     }
 }
+
 // bool ompl::geometric::newPRM::sampleIKgoal(ob::State *result)
 bool ompl::geometric::newPRM::sampleIKgoal(ob::State *state)
 {
@@ -467,18 +476,18 @@ ompl::base::PlannerStatus ompl::geometric::newPRM::solve(const base::PlannerTerm
     });
     base::State *mid = si_->allocState();
     constructRoadmap(ptcOrSolutionFound, mid, 0.0);
-
-    // Ensure slnThread is ceased before exiting solve
-    slnThread.join();
-
+    slnThread.join(); //// Ensure slnThread is ceased before exiting solve
+    
     OMPL_INFORM("%s: Created %u states", getName().c_str(), boost::num_vertices(g_) - nrStartStates);
+    std::cout << "start : " << startM_.size() << std::endl;
+    std::cout << "goal : " << goalM_.size() << std::endl;
     // foreach (Vertex v, boost::vertices(g_))
     //     si_->printState(stateProperty_[v]);
 
     // std::vector<Vertex> motions;
     // nn_->list(motions);
 
-    // for (auto &vertex : goalM_)
+    // for (auto &vertex : startM_)
         // si_->printState(stateProperty_[vertex]);
 
     if (sol)
@@ -739,40 +748,30 @@ ompl::base::Cost ompl::geometric::newPRM::costHeuristic(Vertex u, Vertex v) cons
 {
     auto u_ = stateProperty_[u];
     auto v_ = stateProperty_[v]; //access to the internal base::state at each Vertex.
+    Eigen::Map<Eigen::VectorXd> &prev = *u_->as<ob::ConstrainedStateSpace::StateType>();
+    Eigen::Map<Eigen::VectorXd> &current = *u_->as<ob::ConstrainedStateSpace::StateType>();
 
-    auto *prev_ = u_->as<ompl::base::ConstrainedStateSpace::StateType>()->getState()->as<KinematicChainSpace::StateType>();
-    auto *current_ = v_->as<ompl::base::ConstrainedStateSpace::StateType>()->getState()->as<KinematicChainSpace::StateType>();
-
-    Eigen::Matrix<double, 7, 1> prev;
-    Eigen::Matrix<double, 7, 1> current;
-
-    for (int i = 0; i < 7; i++)
-    {
-        prev[i] = prev_->values[i];
-        current[i] = current_->values[i];
-    }
-
-    Eigen::Affine3d u_trans = panda_arm->getTransform(prev);
-    Eigen::Affine3d v_trans = panda_arm->getTransform(current);
+    Eigen::Affine3d u_trans = panda_arm->getTransform(prev.segment<7>(0));
+    Eigen::Affine3d v_trans = panda_arm->getTransform(current.segment<7>(0));
     Eigen::Quaterniond u_quat(u_trans.linear());
     Eigen::Quaterniond v_quat(v_trans.linear());
-    double d = (u_trans.translation() - v_trans.translation() ).norm();
+    double d = (u_trans.translation() - v_trans.translation()).norm();
     double r = u_quat.angularDistance(v_quat);
-    ompl::base::Cost cost(d+r);
+    ompl::base::Cost cost(d + r);
     return cost;
-
     // return opt_->motionCostHeuristic(stateProperty_[u], stateProperty_[v]);
 }
 
 bool ompl::geometric::newPRM::isSatisfied(const ob::State *st) const
 {
     auto *s = st->as<ompl::base::ConstrainedStateSpace::StateType>()->getState()->as<KinematicChainSpace::StateType>();
+
     Eigen::Matrix<double, 7, 1> joint;
     for (int i = 0; i < 7; i++)
         joint[i] = s->values[i];
-    Eigen::Affine3d right_Rgrasp = panda_arm->getTransform(joint);
+    Eigen::Affine3d serve_Sgrasp = panda_arm->getTransform(joint);
 
-    Eigen::Affine3d base_obj = grp.base_main * right_Rgrasp * grp.Sgrp_obj;
+    Eigen::Affine3d base_obj = grp.base_serve * serve_Sgrasp * grp.Sgrp_obj;
     Eigen::Vector3d rpy = base_obj.linear().eulerAngles(0, 1, 2);
 
     // double yaw = rpy[0];
@@ -789,4 +788,19 @@ bool ompl::geometric::newPRM::isSatisfied(const ob::State *st) const
     }
 
     return false;
+}
+
+void ompl::geometric::newPRM::updateStart(const base::PlannerTerminationCondition &ptc)
+{
+    while (!ptc)
+    {
+        // Check for any new start states
+        if (pdef_->getStartStateCount() > startM_.size())
+        {
+            const base::State *st = pis_.nextStart();
+            if (st != nullptr)
+                startM_.push_back(addMilestone(si_->cloneState(st)));
+        }
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+    }
 }

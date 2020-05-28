@@ -37,7 +37,7 @@ if __name__ == '__main__':
 
     mdp = MoveGroupPlanner()
     mdp.gripper_open()
-    closed_chain = False
+    closed_chain = True
     if closed_chain:
         joint_goal = [0.8538476617343256, 0.7765987891970887, -1.38718092553011, -1.9162352330353676, 2.693557656819878, 2.209230516957901, -2.8518449420397336,
                       2.4288973744080127, 0.2356190832102002, -2.6487764272706724, -2.409884568379378, 2.7754012268293335, 2.451555244441547, 2.786489214331766]
@@ -50,8 +50,8 @@ if __name__ == '__main__':
         touch_links = mdp.robot.get_link_names(group='hand_chair_up')
         mdp.plan_joint_target(joint_goal, 'panda_chair_up')
     rospy.sleep(2)
-    for i in joint_goal :
-        print(i * 180 / pi)
+    # for i in joint_goal :
+    #     print(i * 180 / pi)
     for key, value in mdp.stefan.list.items():
             mdp.scene.add_mesh(
                 key, value, mdp.stefan.stefan_dir + key + ".stl")

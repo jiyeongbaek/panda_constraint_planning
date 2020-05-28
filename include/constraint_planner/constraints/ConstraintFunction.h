@@ -29,29 +29,29 @@ using namespace std;
 class KinematicChainConstraint : public ompl::base::Constraint
 {
 public:
-    KinematicChainConstraint(unsigned int links) : ompl::base::Constraint(14, 6)
+    KinematicChainConstraint(unsigned int links) : ompl::base::Constraint(14, 4)
     {
 
         grasping_point grp;
          for (int i = 0; i < 7; i++)
         {
-            qinit_1st[i] = grp.start[i];
-            qinit_3rd[i] = grp.start[i + 7];
+            qinit_serve[i] = grp.start[i];
+            qinit_main[i] = grp.start[i + 7];
         }
 
         base_serve = grp.base_serve;
         base_main = grp.base_main;
 
         offset_R = Eigen::Affine3d::Identity();
-        offset_R.linear() = Eigen::AngleAxisd(M_PI / 4, Eigen::Vector3d::UnitX()).toRotationMatrix();
+        offset_R.linear() = Eigen::AngleAxisd(M_PI / 7, Eigen::Vector3d::UnitX()).toRotationMatrix();
 
         panda_arm = std::make_shared<FrankaModelUpdater>();
-        init_1st = base_serve * panda_arm->getTransform(qinit_1st) * offset_R;
-        init_3rd = base_main * panda_arm->getTransform(qinit_3rd);
+        init_serve = base_serve * panda_arm->getTransform(qinit_serve) * offset_R;
+        init_main = base_main * panda_arm->getTransform(qinit_main);
 
-        init = init_1st.inverse() * init_3rd;
-        // std::cout << "init_1st " << init_1st.linear() << std::endl;
-        // std::cout << "init_3rd " << init_3rd.linear() << std::endl;
+        init = init_serve.inverse() * init_main;
+        // std::cout << "init_serve " << init_serve.linear() << std::endl;
+        // std::cout << "init_main " << init_main.linear() << std::endl;
         // std::cout << "relative position : " << init.translation().transpose() << std::endl;
         // std::cout << "relative position : " << init.linear().eulerAngles(0, 1, 2).transpose() << std::endl;
         lower_limit << -2.8973, -1.7628, -2.8973, -3.0718, -2.8973, -0.0175, -2.8973, -2.8973, -1.7628, -2.8973, -3.0718, -2.8973, -0.0175, -2.8973;
@@ -185,7 +185,8 @@ public:
     //     D_inv = scaling_matrix_inv(x);
 
     //     trust_radius = (D_inv * new_j).norm(); // initial trust radius
-    //     while (((norm1 = f.segment(0, 3).squaredNorm()) > squaredTolerance1 || (norm2 = f.segment(3, 3).squaredNorm()) > squaredTolerance2) && iter++ < maxIterations)
+    //     while ( ( (norm1 = f.head(3).squaredNorm()) > squaredTolerance1  || (norm2 = f[3]*f[3]) > squaredTolerance2 )
+    //                 && iter++ < maxIterations)
     //     {
     //         // OMPL_INFORM("ITER : %d  / ftn : %f  /  norm 1 : %f  /  norm 2 : %f", iter, new_f, norm1, norm2);
     //         /* STEP 1 : Compute J, F, D*/
@@ -308,16 +309,27 @@ public:
         const double squaredTolerance1 = tolerance1_ * tolerance1_;
         const double squaredTolerance2 = tolerance2_ * tolerance2_;
         function(x, f);
-        while ( ( (norm1 = f.segment(0, 3).squaredNorm()) > squaredTolerance1  || (norm2 = f.segment(3, 3).squaredNorm()) > squaredTolerance2 )
+        while ( ( (norm1 = f.head(3).squaredNorm()) > squaredTolerance1  || (norm2 = f[3]*f[3]) > squaredTolerance2 )
                     && iter++ < maxIterations)
         {
-            // OMPL_INFORM("ITER : %d  / norm : %f  "  , iter, f.norm());
-            // cout << "x          : " << x.transpose() << endl;
             jacobian(x, j);
-            x -= j.jacobiSvd(Eigen::ComputeThinU | Eigen::ComputeThinV).solve(f);
+            x -= 0.20 * j.jacobiSvd(Eigen::ComputeThinU | Eigen::ComputeThinV).solve(f);
+
+            // OMPL_INFORM("ITER : %d  / norm1 : %f  / norm2 : %f  "  , iter, norm1, f[3]*f[3]);
             function(x, f);
         }
-        return (norm1 < squaredTolerance1) && (norm2 < squaredTolerance2);
+        // cout << "F : " << f.transpose() << endl;
+        // cout << "f tail : " << f.tail(3).transpose() << endl;
+        // cout << f.tail(3).squaredNorm() << endl;
+        // cout << "x          : " << x.transpose() << endl;
+        if ((norm1 < squaredTolerance1) && (norm2 < squaredTolerance2))
+        {
+            // OMPL_INFORM("ITER : %d  / norm1 : %f  / norm2 : %f  "  , iter, norm1, norm2);
+            return true;
+        }
+        else    
+            return false;
+        // return (norm1 < squaredTolerance1) && (norm2 < squaredTolerance2);
     }
 
 
@@ -334,25 +346,32 @@ public:
 
         Eigen::Affine3d result = lt.inverse() * rt;
 
-        Eigen::VectorXd p = (result.translation() - init.translation());
-        Eigen::Matrix3d r_diff = init.linear().transpose() * result.linear();
-        Eigen::Vector3d r = r_diff.eulerAngles(0, 1, 2);
+        Eigen::VectorXd p = result.translation() - init.translation();
 
         // Eigen::Vector3d r = result.linear().eulerAngles(0, 1, 2) - init.linear().eulerAngles(0, 1, 2);
 
+        Eigen::Quaterniond cur_q(result.linear());
+        Eigen::Quaterniond ori_q(init.linear());
+        double r = cur_q.angularDistance(ori_q);
+
+
+        // std::cout << r << std::endl;
+        
+        // Eigen::Matrix3d r_diff = init.linear().transpose() * result.linear();
+        // Eigen::Vector3d r = r_diff.eulerAngles(0, 1, 2);
+        // Eigen::Vector3d r = result.linear().eulerAngles(0, 1, 2);
+
+
         // Eigen::AngleAxisd r_angleaxis(r_diff);
         // Eigen::Vector3d r = r_angleaxis.axis() * r_angleaxis.angle();
-        // r = lt.linear().inverse() * init_3rd.linear() * r;
+        // r = lt.linear().inverse() * init_main.linear() * r;
         // 
-        out[0] = p[0];
-        out[1] = p[1];
-        out[2] = p[2];
-        // out(3) = atan2(r_diff(2, 1), r_diff(2, 2));
-        // out(4) = -asin(r_diff(2, 0));
-        // out(5) = atan2(r_diff(1, 0), r_diff(0, 0));
-        out[3] = r[3];
-        out[4] = r[4];
-        out[5] = r[5];
+        out[0] = -p[0];
+        out[1] = -p[1];
+        out[2] = -p[2];
+        out[3] = r;
+        // out[4] = r[1];
+        // out[5] = r[2];
     }
 
     /* this is very computationally intensive, and providing an analytic derivative is preferred. We provide a simple scrip */
@@ -400,19 +419,16 @@ public:
     //     omega_1st.block<3, 3>(3, 3) = lt.linear().inverse();
     //     omega_3rd.block<3, 3>(0, 0) = result.linear() * (rt.linear().inverse());
     //     omega_3rd.block<3, 3>(3, 3) = result.linear() * (rt.linear().inverse());
-    //     std::cout << result.linear() << std::endl;
-    //     // std::cout << "omega_1st" << std::endl;
-    //     // std::cout << omega_1st << std::endl;
-    //     // std::cout << "omega_3rd" << std::endl;
-    //     // std::cout << omega_3rd << std::endl;
-
+    //     // std::cout << result.linear() << std::endl;
+        
     //     Eigen::MatrixXd wrench = Eigen::MatrixXd::Zero(6, 6);
     //     wrench.block<3, 3>(0, 0) = Eigen::Matrix3d::Identity();
     //     wrench.block<3, 3>(3, 3) = Eigen::Matrix3d::Identity();
     //     wrench.block<3, 3>(0, 3) = -skew_symmetric(result.translation());
         
-    //     // std::cout << "wrench" << std::endl;
-    //     // std::cout << wrench << std::endl;
+        
+    //     std::cout << "wrench" << std::endl;
+    //     std::cout << wrench << std::endl;
     //     Eigen::MatrixXd jaco(6, 14);
     //     jaco.block<6, 7>(0, 0) = -wrench * omega_1st * jaco_l;
     //     jaco.block<6, 7>(0, 7) = omega_3rd * jaco_r;
@@ -423,13 +439,12 @@ public:
     //     e_R << 1, sin(rpy[0]) * sin(rpy[1]) / cos(rpy[1]), -cos(rpy[0])*sin(rpy[1])/cos(rpy[1]), 
     //             0, cos(rpy[0]), sin(rpy[0]),
     //             0, -sin(rpy[0]) / cos(rpy[1]) , cos(rpy[0]) / cos(rpy[1]);
-    //     e_matrix.block<3, 3>(3, 3) = e_R.inverse();
-        
-    //     // std::cout << "e_matrix" << std::endl;
-    //     // std::cout << e_matrix << std::endl;
+    //     e_matrix.block<3, 3>(3, 3) = e_R ;
+
     //     // out = e_matrix * jaco;
+    //     std::cout << result.linear() << std::endl;
+    //     std::cout << std::endl;
     //     out = jaco;
-    //     // out = jaco.topRows(3);
         
     // }
 
@@ -447,7 +462,7 @@ public:
     {
         Eigen::VectorXd f(getCoDimension());
         function(x, f);
-        return f.allFinite() && f.segment(0, 3).squaredNorm() <= tolerance1_ * tolerance1_ && f.segment(3, 3).squaredNorm() <= tolerance2_ * tolerance2_;
+        return f.allFinite() && f.head(3).squaredNorm() <= tolerance1_ * tolerance1_ && f[3] * f[3] <= tolerance2_ * tolerance2_;
     }
 
     Eigen::Matrix3d skew_symmetric(Eigen::Vector3d x) const
@@ -468,8 +483,8 @@ protected:
 
 private:
     Eigen::Matrix<double, 7, 1> q_1st, q_3rd;
-    Eigen::Matrix<double, 7, 1> qinit_1st, qinit_3rd;
-    Eigen::Affine3d init_1st, init_3rd, init, init_tr;
+    Eigen::Matrix<double, 7, 1> qinit_serve, qinit_main;
+    Eigen::Affine3d init_serve, init_main, init, init_tr;
 
     std::shared_ptr<FrankaModelUpdater> panda_arm;
     Eigen::Matrix<double, 4, 4> init_;
@@ -493,8 +508,8 @@ typedef std::shared_ptr<KinematicChainConstraint> ChainConstraintPtr;
 //     {
 //         for (int i = 0; i < 7; i++)
 //         {
-//             qinit_1st[i] = start[i];
-//             qinit_3rd[i] = start[i + 7];
+//             qinit_serve[i] = start[i];
+//             qinit_main[i] = start[i + 7];
 //         }
 //         base_serve.translation() = Eigen::Vector3d(0.0, 0.2, 0.0);
 //         base_main.translation() = Eigen::Vector3d(0.0, -0.2, 0.0);
@@ -502,9 +517,9 @@ typedef std::shared_ptr<KinematicChainConstraint> ChainConstraintPtr;
 //         panda_model = std::make_shared<FrankaModelUpdater>(q_1st);
 //         panda_model = std::make_shared<FrankaModelUpdater>(q_3rd);
 
-//         init_1st = base_serve * panda_model->getTransform(qinit_1st);
-//         init_3rd = base_main * panda_model->getTransform(qinit_3rd);
-//         init = init_1st.inverse() * init_3rd;
+//         init_serve = base_serve * panda_model->getTransform(qinit_serve);
+//         init_main = base_main * panda_model->getTransform(qinit_main);
+//         init = init_serve.inverse() * init_main;
 //         init_tr = init.linear().transpose();
 //     }
 
@@ -576,8 +591,8 @@ typedef std::shared_ptr<KinematicChainConstraint> ChainConstraintPtr;
 
 // private:
 //     Eigen::Matrix<double, 7, 1> q_1st, q_3rd;
-//     Eigen::Matrix<double, 7, 1> qinit_1st, qinit_3rd;
-//     Eigen::Affine3d init_1st, init_3rd, init, init_tr;
+//     Eigen::Matrix<double, 7, 1> qinit_serve, qinit_main;
+//     Eigen::Affine3d init_serve, init_main, init, init_tr;
 
 //     std::shared_ptr<FrankaModelUpdater> init_panda_model, panda_model;
 //     std::shared_ptr<FrankaModelUpdater> panda_model, init_panda_model;
